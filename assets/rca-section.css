@@ -1,0 +1,123 @@
+.rca-section {
+    overflow: hidden;
+    margin: 16px 0 26px;
+    border: 1px solid #d5e1e9;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(23, 63, 91, 0.10);
+}
+
+.rca-title-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    min-height: 54px;
+    padding: 12px 16px;
+    background: #d33c55;
+    color: #ffffff;
+}
+
+.rca-title-bar h2 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.rca-month {
+    flex-shrink: 0;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.rca-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.rca-table {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: collapse;
+    table-layout: fixed;
+    color: #082d4c;
+    font-size: 15px;
+}
+
+.rca-table th {
+    padding: 13px 12px;
+    border-right: 1px solid rgba(255, 255, 255, 0.22);
+    background: #0b557f;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: left;
+}
+
+.rca-table th:last-child {
+    border-right: 0;
+}
+
+.rca-table th:nth-child(1) {
+    width: 20%;
+}
+
+.rca-table th:nth-child(2) {
+    width: 17%;
+}
+
+.rca-table th:nth-child(3) {
+    width: 31.5%;
+}
+
+.rca-table th:nth-child(4) {
+    width: 31.5%;
+}
+
+.rca-table td {
+    padding: 14px 12px;
+    border-bottom: 1px solid #d5e1e9;
+    background: #ffffff;
+    line-height: 1.45;
+    vertical-align: top;
+}
+
+.rca-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.rca-table tbody tr:hover td {
+    background: #f5f9fc;
+}
+
+.rca-kpi-name {
+    font-weight: 600;
+}
+
+.rca-missing-value {
+    color: #a66b00;
+    font-style: italic;
+}
+
+.rca-empty-message {
+    padding: 30px 18px;
+    color: #6e879b;
+    font-size: 14px;
+    text-align: center;
+}
+
+@media screen and (max-width: 760px) {
+    .rca-title-bar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .rca-title-bar h2 {
+        font-size: 19px;
+    }
+}

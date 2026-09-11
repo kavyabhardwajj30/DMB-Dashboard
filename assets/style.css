@@ -1,0 +1,747 @@
+:root {
+    --navy: #07537f;
+    --navy-dark: #063b65;
+    --blue: #0877b9;
+    --green: #168b69;
+    --red: #dc3d56;
+    --amber: #c18100;
+    --purple: #8b5cf6;
+    --text-dark: #082d4c;
+    --text-medium: #496780;
+    --text-muted: #6e879b;
+    --page-background: #edf4f8;
+    --card-background: #ffffff;
+    --card-border: #d5e1e9;
+    --soft-panel: #edf4f8;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    width: 100%;
+    min-height: 100%;
+    scroll-behavior: smooth;
+}
+
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: var(--page-background) !important;
+    background-image: linear-gradient(
+        135deg,
+        #f6f9fc 0%,
+        #edf4f8 52%,
+        #e6f2f8 100%
+    ) !important;
+    color: var(--text-dark) !important;
+    font-family: "Segoe UI", Arial, sans-serif !important;
+    font-size: 15px;
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+.page-shell {
+    width: calc(100% - 32px);
+    max-width: 1880px;
+    min-height: calc(100vh - 32px);
+    margin: 16px auto;
+    overflow: hidden;
+    border: 1px solid #d2e0e8;
+    border-radius: 18px;
+    background: rgba(237, 244, 248, 0.84);
+    box-shadow: 0 12px 38px rgba(22, 62, 89, 0.10);
+}
+
+/* =========================================================
+   TOP NAVIGATION
+   ========================================================= */
+
+.top-navigation {
+    display: grid !important;
+    grid-template-columns: minmax(300px, 1fr) auto minmax(300px, 1fr);
+    align-items: center !important;
+    gap: 28px;
+    min-height: 104px;
+    padding: 18px 26px;
+    background: linear-gradient(110deg, #06456f 0%, #075a86 100%);
+    color: #ffffff;
+}
+
+.brand-section {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 14px;
+}
+
+.brand-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 54px;
+    width: 54px;
+    height: 54px;
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--blue);
+    font-size: 24px;
+    font-weight: 800;
+    box-shadow: 0 6px 16px rgba(3, 43, 74, 0.16);
+}
+
+.brand-text {
+    min-width: 0;
+}
+
+.brand-text h1 {
+    margin: 0;
+    overflow: hidden;
+    color: #ffffff !important;
+    font-size: 28px;
+    font-weight: 750;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.brand-text p {
+    margin: 5px 0 0;
+    color: #d5eaf6 !important;
+    font-size: 13px;
+}
+
+.navigation-tabs {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.navigation-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 136px;
+    min-height: 54px;
+    padding: 12px 28px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #ffffff !important;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none !important;
+    transition: background 0.2s ease, color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.navigation-tab:hover,
+.navigation-tab:focus-visible {
+    background: rgba(255, 255, 255, 0.14);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.navigation-tab-active {
+    border-color: #ffffff;
+    background: #ffffff !important;
+    color: var(--navy) !important;
+}
+
+.download-button {
+    justify-self: end;
+    min-width: 158px;
+    min-height: 52px;
+    padding: 12px 22px;
+    border: 0;
+    border-radius: 11px;
+    background: #ffffff;
+    color: var(--navy) !important;
+    cursor: pointer;
+    font-size: 17px;
+    font-weight: 750;
+    box-shadow: 0 7px 18px rgba(3, 43, 74, 0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.download-button:hover,
+.download-button:focus-visible {
+    outline: none;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(3, 43, 74, 0.22);
+}
+
+/* =========================================================
+   EXECUTIVE INSIGHTS
+   ========================================================= */
+
+.executive-insights {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 14px;
+    padding: 14px 14px 0;
+}
+
+.insight-card {
+    min-width: 0;
+    min-height: 140px;
+    padding: 15px 17px;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: var(--card-background) !important;
+    box-shadow: 0 6px 17px rgba(23, 63, 91, 0.07);
+}
+
+.highlight-card {
+    border-top: 4px solid var(--green);
+}
+
+.lowlight-card {
+    border-top: 4px solid var(--amber);
+}
+
+.concern-card {
+    border-top: 4px solid var(--red);
+}
+
+.insight-title-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e5edf2;
+}
+
+.insight-title-row h3 {
+    margin: 0;
+    color: var(--text-dark) !important;
+    font-size: 17px;
+    font-weight: 750;
+}
+
+.highlight-card .insight-title-row h3 {
+    color: var(--green) !important;
+}
+
+.lowlight-card .insight-title-row h3 {
+    color: var(--amber) !important;
+}
+
+.concern-card .insight-title-row h3 {
+    color: var(--red) !important;
+}
+
+.insight-count {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 27px;
+    min-width: 27px;
+    height: 27px;
+    padding: 0 7px;
+    border-radius: 14px;
+    background: #edf3f7;
+    color: var(--text-medium);
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.insight-list {
+    margin: 11px 0 0;
+    padding-left: 18px;
+    color: var(--text-medium) !important;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.insight-list li {
+    margin-bottom: 5px;
+}
+
+.empty-message {
+    margin: 14px 0 0;
+    color: #8298a9 !important;
+    font-size: 13px;
+}
+
+/* =========================================================
+   MAIN MPR AND DMB SECTIONS
+   ========================================================= */
+
+.dashboard-section {
+    margin: 14px;
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    border-radius: 13px;
+    background: #ffffff;
+    box-shadow: 0 7px 20px rgba(23, 63, 91, 0.07);
+}
+
+.section-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 24px;
+    min-height: 70px;
+    padding: 13px 16px;
+    scroll-margin-top: 16px;
+    background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
+    color: #ffffff;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: #ffffff !important;
+    font-size: 21px;
+    font-weight: 750;
+    line-height: 1.25;
+}
+
+.section-header p {
+    margin: 4px 0 0;
+    color: #d6eaf5 !important;
+    font-size: 12px;
+}
+
+.section-month-control {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    gap: 10px;
+}
+
+.section-month-control label {
+    flex-shrink: 0;
+    color: #ffffff !important;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.section-month-dropdown {
+    width: 205px;
+    min-width: 205px;
+    color: var(--text-dark) !important;
+    font-size: 15px;
+}
+
+.section-month-dropdown .Select-control {
+    min-height: 42px !important;
+    border: 0 !important;
+    border-radius: 9px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+.section-month-dropdown .Select-value,
+.section-month-dropdown .Select-placeholder {
+    line-height: 42px !important;
+}
+
+.section-month-dropdown .Select-value-label {
+    color: var(--text-dark) !important;
+    font-weight: 600;
+}
+
+.section-month-dropdown .Select-arrow-zone {
+    padding-right: 11px;
+}
+
+.section-month-dropdown .Select-menu-outer {
+    z-index: 6000 !important;
+    overflow: hidden;
+    border: 1px solid #d5e1e9 !important;
+    border-radius: 9px !important;
+    background: #ffffff !important;
+    color: var(--text-dark) !important;
+    box-shadow: 0 10px 24px rgba(23, 63, 91, 0.18) !important;
+}
+
+.section-month-dropdown .Select-option,
+.section-month-dropdown .VirtualizedSelectOption,
+.section-month-dropdown .Select__option,
+.section-month-dropdown [role="option"] {
+    min-height: 38px;
+    padding: 10px 12px !important;
+    color: #142638 !important;
+    background: #ffffff !important;
+    opacity: 1 !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    line-height: 18px !important;
+}
+
+.section-month-dropdown .Select-option:hover,
+.section-month-dropdown .Select-option.is-focused,
+.section-month-dropdown .VirtualizedSelectFocusedOption,
+.section-month-dropdown .Select__option--is-focused,
+.section-month-dropdown [role="option"]:hover,
+.section-month-dropdown [role="option"][aria-selected="true"] {
+    background: #eaf4f9 !important;
+    color: #063b65 !important;
+}
+
+/* Dash versions using the newer React Select class names. */
+.section-month-dropdown .Select__control {
+    min-height: 42px !important;
+    border: 0 !important;
+    border-radius: 9px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+.section-month-dropdown .Select__single-value {
+    color: var(--text-dark) !important;
+    font-weight: 600;
+}
+
+.section-month-dropdown .Select__menu {
+    z-index: 6000 !important;
+    border-radius: 9px !important;
+    background: #ffffff !important;
+    color: var(--text-dark) !important;
+}
+
+.section-month-dropdown .Select-menu,
+.section-month-dropdown .Select__menu-list {
+    background: #ffffff !important;
+    color: var(--text-dark) !important;
+}
+
+/* Dash 4 dropdown classes. */
+.section-month-dropdown .dash-dropdown-content,
+.section-month-dropdown .dash-dropdown-options {
+    background: #ffffff !important;
+    color: #142638 !important;
+}
+
+.section-month-dropdown .dash-dropdown-option,
+.section-month-dropdown .dash-dropdown-option *,
+.section-month-dropdown .month-option-label {
+    color: #142638 !important;
+    -webkit-text-fill-color: #142638 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+
+.section-month-dropdown .dash-dropdown-option {
+    min-height: 40px !important;
+    padding: 10px 12px !important;
+    background: #ffffff !important;
+}
+
+.section-month-dropdown .dash-dropdown-option:hover,
+.section-month-dropdown .dash-dropdown-option[aria-selected="true"],
+.section-month-dropdown .dash-dropdown-option[data-selected="true"] {
+    background: #eaf4f9 !important;
+    color: #063b65 !important;
+}
+
+.section-month-dropdown .dash-dropdown-value,
+.section-month-dropdown .dash-dropdown-value * {
+    color: #142638 !important;
+    -webkit-text-fill-color: #142638 !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
+}
+
+/* =========================================================
+   MPR SUMMARY CARDS
+   ========================================================= */
+
+.kpi-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 9px;
+    padding: 12px 12px 0;
+}
+
+.kpi-summary-card {
+    min-width: 0;
+    min-height: 98px;
+    padding: 15px 14px;
+    border: 1px solid #e1e9ef;
+    border-radius: 10px;
+    background: var(--soft-panel) !important;
+}
+
+.kpi-card-label {
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-muted) !important;
+    font-size: 12px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kpi-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.kpi-card-value {
+    font-size: 33px;
+    font-weight: 750;
+    line-height: 1;
+}
+
+.kpi-card-secondary {
+    color: var(--text-medium);
+    font-size: 13px;
+}
+
+/* =========================================================
+   MPR VISUALS
+   ========================================================= */
+
+.mpr-visual-grid {
+    display: grid !important;
+    grid-template-columns:
+        minmax(240px, 0.82fr)
+        minmax(340px, 1.28fr)
+        minmax(470px, 1.9fr) !important;
+    gap: 10px;
+    padding: 10px 12px 14px;
+}
+
+.mpr-chart-card {
+    min-width: 0;
+    min-height: 270px;
+    overflow: hidden;
+    border: 1px solid #d9e5ec;
+    border-radius: 10px;
+    background: var(--soft-panel) !important;
+}
+
+.chart-title-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px;
+    padding: 12px 14px 4px;
+}
+
+.chart-title-row h3 {
+    margin: 0;
+    color: var(--text-dark) !important;
+    font-size: 15px;
+    font-weight: 750;
+}
+
+.chart-note {
+    flex-shrink: 0;
+    color: var(--text-muted) !important;
+    font-size: 11px;
+}
+
+.gauge-chart-card #mpr-gauge,
+.imperative-chart-card #mpr-imperative-chart,
+.trend-chart-card #mpr-trend-chart {
+    width: 100%;
+}
+
+.imperative-chart-card #mpr-imperative-chart {
+    height: 245px;
+}
+
+/* Plotly charts */
+.js-plotly-plot,
+.plot-container,
+.svg-container {
+    max-width: 100% !important;
+}
+
+.modebar {
+    display: none !important;
+}
+
+/* Keep the normal arrow cursor on the monthly trend chart. */
+.trend-chart-card .plotly .cursor-crosshair,
+.trend-chart-card .plotly .nsewdrag,
+.trend-chart-card .plotly .drag,
+.trend-chart-card .plotly .draglayer {
+    cursor: default !important;
+}
+
+.imperative-chart-card .plotly .cursor-crosshair,
+.imperative-chart-card .plotly .nsewdrag,
+.imperative-chart-card .plotly .drag,
+.imperative-chart-card .plotly .draglayer {
+    cursor: default !important;
+}
+
+._dash-debug-menu {
+    opacity: 0.3;
+}
+
+/* =========================================================
+   RESPONSIVE LAYOUT
+   ========================================================= */
+
+@media screen and (max-width: 1250px) {
+    .top-navigation {
+        grid-template-columns: minmax(280px, 1fr) auto auto;
+    }
+
+    .navigation-tab {
+        min-width: 105px;
+    }
+
+    .mpr-visual-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .trend-chart-card {
+        grid-column: 1 / -1;
+    }
+}
+
+@media screen and (max-width: 960px) {
+    .page-shell {
+        width: calc(100% - 20px);
+        margin: 10px auto;
+        border-radius: 14px;
+    }
+
+    .top-navigation {
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+    }
+
+    .navigation-tabs {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .download-button {
+        min-width: 135px;
+    }
+
+    .executive-insights {
+        grid-template-columns: 1fr !important;
+    }
+
+    .insight-card {
+        min-height: 0;
+    }
+
+    .kpi-summary-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+}
+
+@media screen and (max-width: 760px) {
+    .top-navigation {
+        grid-template-columns: 1fr;
+        padding: 16px;
+    }
+
+    .brand-text h1 {
+        font-size: 24px;
+        white-space: normal;
+    }
+
+    .navigation-tabs {
+        grid-column: auto;
+        grid-row: auto;
+        width: 100%;
+    }
+
+    .navigation-tab {
+        flex: 1 1 50%;
+        min-width: 0;
+    }
+
+    .download-button {
+        justify-self: stretch;
+        width: 100%;
+    }
+
+    .section-header {
+        align-items: flex-start !important;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .section-month-control {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .section-month-dropdown {
+        width: min(100%, 230px);
+        min-width: 0;
+    }
+
+    .kpi-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .mpr-visual-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .trend-chart-card {
+        grid-column: auto;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .page-shell {
+        width: 100%;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .brand-logo {
+        flex-basis: 46px;
+        width: 46px;
+        height: 46px;
+    }
+
+    .executive-insights,
+    .dashboard-section {
+        margin-right: 9px;
+        margin-left: 9px;
+    }
+
+    .executive-insights {
+        padding-right: 0;
+        padding-left: 0;
+    }
+
+    .kpi-summary-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+}
+
+/* =========================================================
+   ONE-PAGER IMAGE EXPORT
+   ========================================================= */
+
+html.one-pager-capturing,
+html.one-pager-capturing body {
+    cursor: progress !important;
+}
+
+html.one-pager-capturing .download-button {
+    pointer-events: none;
+    opacity: 0.65;
+}
