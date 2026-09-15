@@ -2720,7 +2720,13 @@ app.clientside_callback(
     Input("download-one-pager-button", "n_clicks"),
     prevent_initial_call=True,
 )
+from app_poller_integration import start_dmb_mailbox_poller
+import data_loader
 
+# Starts the 24/7 background SharePoint mailbox poller and reloads data automatically
+start_dmb_mailbox_poller(
+    reload_callback=lambda: data_loader.load_data() if hasattr(data_loader, "load_data") else None
+)
 
 if __name__ == "__main__":
     app.run(
@@ -2728,3 +2734,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 10000)),
         debug=False,
     )
+
