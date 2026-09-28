@@ -41,48 +41,42 @@ interface KPIRow {
 function main(workbook: ExcelScript.Workbook, functionalJson?: string, strategicJson?: string): { dmbRows: number; mprRows: number; status: string } {
   console.log("Starting Masterfile sync with exact Mastersheet styling...");
 
-  // Safety check: if run manually in Excel without Power Automate parameters
-  const hasFunctionalInput = functionalJson && functionalJson.trim().length > 2;
-  const hasStrategicInput = strategicJson && strategicJson.trim().length > 2;
-
-  if (!hasFunctionalInput && !hasStrategicInput) {
-    const msg = "Notice: 'Update_Masterfile' requires JSON inputs from Power Automate (Step 1 & Step 2). When clicked manually in Excel, no data is passed. Please run the Power Automate flow to execute the sync.";
-    console.warn(msg);
-    return {
-      dmbRows: 0,
-      mprRows: 0,
-      status: msg
-    };
-  }
-
   let dmbRowsCount = 0;
   let mprRowsCount = 0;
 
   // 1. Process Functional Review Data into 'DMB Masterfile'
-  if (hasFunctionalInput) {
+  if (functionalJson && functionalJson.trim().length > 2) {
     try {
-      const functionalRows: KPIRow[] = JSON.parse(functionalJson!);
-      let dmbSheet = workbook.getWorksheet("DMB Masterfile");
-      if (!dmbSheet) {
-        dmbSheet = workbook.addWorksheet("DMB Masterfile");
+      const functionalRows: KPIRow[] = JSON.parse(functionalJson);
+      if (functionalRows.length > 0) {
+        let dmbSheet = workbook.getWorksheet("DMB Masterfile");
+        if (!dmbSheet) {
+          dmbSheet = workbook.addWorksheet("DMB Masterfile");
+        }
+        dmbRowsCount = writeDMBMasterfileExact(dmbSheet, functionalRows);
+        console.log(`Successfully formatted and wrote ${dmbRowsCount} rows to DMB Masterfile.`);
+      } else {
+        console.warn("functionalJson parsed to empty array [].");
       }
-      dmbRowsCount = writeDMBMasterfileExact(dmbSheet, functionalRows);
-      console.log(`Successfully formatted and wrote ${dmbRowsCount} rows to DMB Masterfile.`);
     } catch (err) {
       console.error("Error writing DMB Masterfile:", err);
     }
   }
 
   // 2. Process Strategic Execution Data into 'MPR Masterfile'
-  if (hasStrategicInput) {
+  if (strategicJson && strategicJson.trim().length > 2) {
     try {
-      const strategicRows: KPIRow[] = JSON.parse(strategicJson!);
-      let mprSheet = workbook.getWorksheet("MPR Masterfile");
-      if (!mprSheet) {
-        mprSheet = workbook.addWorksheet("MPR Masterfile");
+      const strategicRows: KPIRow[] = JSON.parse(strategicJson);
+      if (strategicRows.length > 0) {
+        let mprSheet = workbook.getWorksheet("MPR Masterfile");
+        if (!mprSheet) {
+          mprSheet = workbook.addWorksheet("MPR Masterfile");
+        }
+        mprRowsCount = writeMPRMasterfileExact(mprSheet, strategicRows);
+        console.log(`Successfully formatted and wrote ${mprRowsCount} rows to MPR Masterfile.`);
+      } else {
+        console.warn("strategicJson parsed to empty array [].");
       }
-      mprRowsCount = writeMPRMasterfileExact(mprSheet, strategicRows);
-      console.log(`Successfully formatted and wrote ${mprRowsCount} rows to MPR Masterfile.`);
     } catch (err) {
       console.error("Error writing MPR Masterfile:", err);
     }
@@ -126,7 +120,7 @@ function writeDMBMasterfileExact(sheet: ExcelScript.Worksheet, rows: KPIRow[]): 
     "Data Type"
   ];
 
-  // Group rows by function preserving natural order
+  // Group rows by function
   const functionGroups = new Map<string, KPIRow[]>();
   for (const r of rows) {
     const fn = r.functionName || "General";
@@ -283,9 +277,7 @@ function writeDMBMasterfileExact(sheet: ExcelScript.Worksheet, rows: KPIRow[]): 
     valRange.setNumberFormatLocal("0.0%");
   }
 
-  // Auto-fit columns
   sheet.getUsedRange()?.getFormat().autofitColumns();
-
   return tableData.length;
 }
 
@@ -479,8 +471,6 @@ function writeMPRMasterfileExact(sheet: ExcelScript.Worksheet, rows: KPIRow[]): 
     valRange.setNumberFormatLocal("0.0%");
   }
 
-  // Auto-fit columns
   sheet.getUsedRange()?.getFormat().autofitColumns();
-
   return tableData.length;
 }

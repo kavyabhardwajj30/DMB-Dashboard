@@ -35,91 +35,10 @@ interface StrategicKPIRow {
 }
 
 function main(workbook: ExcelScript.Workbook): string {
-  console.log("Starting extraction from Strategic Execution Dashboard...");
+  console.log("Starting strategic execution data extraction...");
   const extractedRows: StrategicKPIRow[] = [];
 
-  // 1. Prefer extracting from existing 'Mastersheet'
-  const masterWs = workbook.getWorksheet("Mastersheet") || workbook.getWorksheet("MasterSheet");
-  if (masterWs && masterWs.getUsedRange()) {
-    const values = masterWs.getUsedRange().getValues();
-    if (values.length > 5) {
-      let currentImperative = "Patient Safety & Quality";
-      let monthCols: { [m: number]: number } = {};
-
-      for (let r = 0; r < values.length; r++) {
-        const row = values[r];
-        const firstCell = String(row[0] || "").trim();
-
-        if (firstCell.toLowerCase().includes("strategic imperative") || !firstCell) continue;
-
-        // Check if row is a section banner (e.g. 'Patient Safety & Quality', 'Customer Focus')
-        const nextFirst = r + 1 < values.length ? String(values[r + 1][0] || "").trim().toLowerCase() : "";
-        if (nextFirst.includes("core kpi") || nextFirst.includes("kpi")) {
-          currentImperative = normalizeImperativeName(firstCell);
-          continue;
-        }
-
-        // Check header row
-        if (firstCell.toLowerCase().includes("core kpi")) {
-          monthCols = getStrategicMonthCols(row);
-          continue;
-        }
-
-        // Check Target / Actual row
-        const typeCell = String(row[9] || "").trim().toUpperCase();
-        if (typeCell === "T" || typeCell === "A") {
-          const kpiName = firstCell;
-          if (!kpiName || kpiName.startsWith("#REF")) continue;
-
-          const getMonthVal = (mIdx: number): number | string => {
-            const cIdx = monthCols[mIdx];
-            if (cIdx !== undefined && cIdx < row.length) {
-              const v = row[cIdx];
-              return v !== null && v !== undefined && String(v) !== "#REF!" ? v : "";
-            }
-            return "";
-          };
-
-          const unitVal = String(row[7] || "").trim();
-          extractedRows.push({
-            strategicImperative: currentImperative,
-            sourceSheet: "Mastersheet",
-            kpiName: kpiName,
-            owner: String(row[1] || "").trim(),
-            definition: String(row[2] || "").trim(),
-            target2026: row[3] !== undefined && row[3] !== null ? row[3] : "",
-            column1: String(row[4] || "").trim(),
-            column2: String(row[5] || "").trim(),
-            nature: String(row[6] || "").trim(),
-            unit: unitVal,
-            frequency: String(row[8] || "Monthly").trim(),
-            rowType: typeCell as "T" | "A",
-            jan: getMonthVal(0),
-            feb: getMonthVal(1),
-            mar: getMonthVal(2),
-            apr: getMonthVal(3),
-            may: getMonthVal(4),
-            jun: getMonthVal(5),
-            jul: getMonthVal(6),
-            aug: getMonthVal(7),
-            sep: getMonthVal(8),
-            oct: getMonthVal(9),
-            nov: getMonthVal(10),
-            dec: getMonthVal(11),
-            dataType: unitVal === "%" ? "Percentage" : "Whole Num"
-          });
-        }
-      }
-
-      if (extractedRows.length > 0) {
-        console.log(`Extracted ${extractedRows.length} strategic rows directly from Mastersheet.`);
-        return JSON.stringify(extractedRows);
-      }
-    }
-  }
-
-  // 2. Fallback to 'AOP Critical' sheet
-  let aopSheet = workbook.getWorksheet("AOP Critical");
+  let aopSheet = workbook.getWorksheet("AOP Critical") || workbook.getWorksheet("Mastersheet");
   if (!aopSheet) {
     const sheets = workbook.getWorksheets();
     aopSheet = sheets.find(s => s.getName().toLowerCase().includes("aop") || s.getName().toLowerCase().includes("strategic")) || sheets[0];
@@ -132,10 +51,11 @@ function main(workbook: ExcelScript.Workbook): string {
   const values = usedRange.getValues();
   if (values.length < 5) return JSON.stringify([]);
 
+  // Detect header row
   let headerRowIndex = 4;
-  for (let r = 0; r < Math.min(12, values.length); r++) {
+  for (let r = 0; r < Math.min(10, values.length); r++) {
     const rowStr = values[r].map(v => String(v).toLowerCase()).join(" ");
-    if (rowStr.includes("jan") || rowStr.includes("feb")) {
+    if (rowStr.includes("core kpi") || rowStr.includes("metric owner") || rowStr.includes("jan")) {
       headerRowIndex = r;
       break;
     }
@@ -143,48 +63,67 @@ function main(workbook: ExcelScript.Workbook): string {
 
   const headerRow = values[headerRowIndex];
   const monthCols = getStrategicMonthCols(headerRow);
-  let currentImperative = "Customer Focus";
+
+  let curImperative = "Patient Safety & Quality";
+  let curKpi = "";
+  let curOwner = "";
+  let curDef = "";
+  let curAop: number | string = "";
+  let curCol1 = "";
+  let curCol2 = "";
+  let curNat = "Higher the better";
+  let curUnit = "%";
+  let curFreq = "Monthly";
 
   for (let r = headerRowIndex + 1; r < values.length; r++) {
     const row = values[r];
     const impVal = String(row[0] || "").trim();
-    if (impVal && !impVal.startsWith("MoS") && !impVal.startsWith("Strategic")) {
-      currentImperative = normalizeImperativeName(impVal);
+    if (impVal && !impVal.startsWith("MoS") && !impVal.startsWith("Strategic") && !impVal.startsWith("#REF") && impVal !== "None") {
+      curImperative = normalizeImperativeName(impVal);
     }
 
-    const rowTypeVal = String(row[10] || "").trim().toUpperCase();
-    if (rowTypeVal === "T" || rowTypeVal === "A") {
-      let kpiName = String(row[1] || "").trim();
-      if (!kpiName || kpiName.toLowerCase().startsWith("value lever")) continue;
+    const kpiVal = String(row[1] || "").trim();
+    if (kpiVal && !kpiVal.toLowerCase().startsWith("value lever") && !kpiVal.startsWith("#REF") && kpiVal !== "None") {
+      curKpi = kpiVal;
+      curOwner = String(row[2] || "").trim();
+      curDef = String(row[3] || "").trim();
+      curAop = row[4] !== undefined && row[4] !== null ? row[4] : "";
+      curCol1 = String(row[5] || "").trim();
+      curCol2 = String(row[6] || "").trim();
+      curNat = String(row[7] || "Higher the better").trim();
+      curUnit = String(row[8] || "%").trim();
+      curFreq = String(row[9] || "Monthly").trim();
+    }
 
-      const kpiDef = String(row[3] || "").trim();
-      if (kpiDef.includes("(EQ)") && !kpiName.includes("(EQ)")) {
-        kpiName = `${kpiName} (EQ)`;
-      } else if (kpiDef.includes("(CS)") && !kpiName.includes("(CS)")) {
-        kpiName = `${kpiName} (CS)`;
-      }
+    // Check Type (Column K / index 10 or Column J / index 9)
+    let typeVal = String(row[10] || "").trim().toUpperCase();
+    if (!typeVal && row.length > 9) {
+      typeVal = String(row[9] || "").trim().toUpperCase();
+    }
 
+    if ((typeVal === "T" || typeVal === "A" || typeVal === "TARGET" || typeVal === "ACTUAL") && curKpi) {
       const getMonthVal = (mIdx: number): number | string => {
         const cIdx = monthCols[mIdx];
         if (cIdx !== undefined && cIdx < row.length) {
           const v = row[cIdx];
-          return v !== null && v !== undefined && String(v) !== "#REF!" ? v : "";
+          return v !== null && v !== undefined && String(v) !== "#REF!" && String(v) !== "None" ? v : "";
         }
         return "";
       };
 
-      const unitVal = String(row[8] || "").trim();
       extractedRows.push({
-        strategicImperative: currentImperative,
+        strategicImperative: curImperative,
         sourceSheet: aopSheet.getName(),
-        kpiName: kpiName,
-        owner: String(row[2] || "").trim(),
-        definition: kpiDef,
-        target2026: row[4] !== undefined && row[4] !== null ? row[4] : "",
-        nature: String(row[7] || "").trim(),
-        unit: unitVal,
-        frequency: String(row[9] || "Monthly").trim(),
-        rowType: rowTypeVal as "T" | "A",
+        kpiName: curKpi,
+        owner: curOwner,
+        definition: curDef,
+        target2026: curAop,
+        column1: curCol1,
+        column2: curCol2,
+        nature: curNat,
+        unit: curUnit,
+        frequency: curFreq,
+        rowType: typeVal.startsWith("T") ? "T" : "A",
         jan: getMonthVal(0),
         feb: getMonthVal(1),
         mar: getMonthVal(2),
@@ -197,7 +136,7 @@ function main(workbook: ExcelScript.Workbook): string {
         oct: getMonthVal(9),
         nov: getMonthVal(10),
         dec: getMonthVal(11),
-        dataType: unitVal === "%" ? "Percentage" : "Whole Num"
+        dataType: curUnit === "%" ? "Percentage" : "Whole Num"
       });
     }
   }
@@ -219,12 +158,14 @@ function getStrategicMonthCols(headerRow: (string | number | boolean)[]): { [mon
       }
     }
   }
-  // Fallback if not matched
+
+  // Fallback: If dates were serials, months in AOP Critical are columns 11 to 22 (or 10 to 21 in Mastersheet)
   for (let m = 0; m < 12; m++) {
     if (mapping[m] === undefined) {
-      mapping[m] = 10 + m;
+      mapping[m] = 11 + m;
     }
   }
+
   return mapping;
 }
 
