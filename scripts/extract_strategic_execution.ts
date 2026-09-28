@@ -82,23 +82,47 @@ function main(workbook: ExcelScript.Workbook): string {
       curImperative = normalizeImperativeName(impVal);
     }
 
-    const kpiVal = String(row[1] || "").trim();
-    if (kpiVal && !kpiVal.toLowerCase().startsWith("value lever") && !kpiVal.startsWith("#REF") && kpiVal !== "None") {
-      curKpi = kpiVal;
-      curOwner = String(row[2] || "").trim();
-      curDef = String(row[3] || "").trim();
-      curAop = row[4] !== undefined && row[4] !== null ? row[4] : "";
-      curCol1 = String(row[5] || "").trim();
-      curCol2 = String(row[6] || "").trim();
-      curNat = String(row[7] || "Higher the better").trim();
-      curUnit = String(row[8] || "%").trim();
-      curFreq = String(row[9] || "Monthly").trim();
-    }
-
     // Check Type (Column K / index 10 or Column J / index 9)
     let typeVal = String(row[10] || "").trim().toUpperCase();
     if (!typeVal && row.length > 9) {
       typeVal = String(row[9] || "").trim().toUpperCase();
+    }
+    const isTargetRow = typeVal === "T" || typeVal === "TARGET";
+
+    const kpiVal = String(row[1] || "").trim();
+    const isHeadingRow = kpiVal.toLowerCase().startsWith("value lever")
+      || kpiVal.startsWith("#REF") || kpiVal === "None";
+
+    if (kpiVal && !isHeadingRow) {
+      curKpi = kpiVal;
+    }
+
+    /*
+     * Metadata sits on the Target row. A Target row can leave the KPI name
+     * cell empty and still be a KPI of its own: the (CS) row below
+     * "Order Intake Growth" carries the definition "OIT Growth % (CS)".
+     * Refreshing every filled cell keeps those two KPIs apart instead of
+     * letting the second overwrite the first.
+     */
+    if (isTargetRow && !isHeadingRow) {
+      const nextOwner = String(row[2] || "").trim();
+      const nextDef = String(row[3] || "").trim();
+      const nextCol1 = String(row[5] || "").trim();
+      const nextCol2 = String(row[6] || "").trim();
+      const nextNat = String(row[7] || "").trim();
+      const nextUnit = String(row[8] || "").trim();
+      const nextFreq = String(row[9] || "").trim();
+
+      if (nextOwner) curOwner = nextOwner;
+      if (nextDef) curDef = nextDef;
+      if (row[4] !== undefined && row[4] !== null && String(row[4]).trim() !== "") {
+        curAop = row[4];
+      }
+      curCol1 = nextCol1;
+      curCol2 = nextCol2;
+      if (nextNat) curNat = nextNat;
+      if (nextUnit) curUnit = nextUnit;
+      if (nextFreq) curFreq = nextFreq;
     }
 
     if ((typeVal === "T" || typeVal === "A" || typeVal === "TARGET" || typeVal === "ACTUAL") && curKpi) {
@@ -136,13 +160,20 @@ function main(workbook: ExcelScript.Workbook): string {
         oct: getMonthVal(9),
         nov: getMonthVal(10),
         dec: getMonthVal(11),
-        dataType: curUnit === "%" ? "Percentage" : "Whole Num"
+        dataType: strategicDataType(curUnit)
       });
     }
   }
 
   console.log(`Extracted ${extractedRows.length} strategic KPI rows.`);
   return JSON.stringify(extractedRows);
+}
+
+function strategicDataType(unit: string): string {
+  const lower = unit.trim().toLowerCase();
+  if (lower === "%") return "Percentage";
+  if (lower === "mn" || lower === "k" || lower.includes("decimal")) return "Decimal";
+  return "Whole Number";
 }
 
 function getStrategicMonthCols(headerRow: (string | number | boolean)[]): { [monthIndex: number]: number } {
@@ -171,11 +202,12 @@ function getStrategicMonthCols(headerRow: (string | number | boolean)[]): { [mon
 
 function normalizeImperativeName(raw: string): string {
   const lower = raw.toLowerCase();
-  if (lower.includes("customer")) return "Customer Focus";
+  // "Cusotomer Focus" is spelled that way in the AOP Critical sheet.
+  if (lower.includes("customer") || lower.includes("cusotomer")) return "Customer Focus";
   if (lower.includes("deliverability") || lower.includes("profitability")) return "Improve Deliverability & Profitability";
   if (lower.includes("safety") || lower.includes("quality")) return "Patient Safety & Quality";
   if (lower.includes("commercial") || lower.includes("growth")) return "Drive growth through Commercial Excellence";
   if (lower.includes("roadmap") || lower.includes("innovation")) return "Roadmap competitiveness & Innovation agility";
-  if (lower.includes("esg") || lower.includes("environmental") || lower.includes("governance")) return "Environmental, Social & Governance (ESG)";
+  if (lower.includes("esg") || lower.includes("environmental") || lower.includes("governance")) return "Environmental, Social & Governance";
   return raw.trim();
 }

@@ -4,6 +4,12 @@
  * Location: Run on 'Functional DMB Review Sheets-17th_sept.xlsx' in SharePoint / Excel Online.
  * Action in Power Automate: "Run script" -> Select Functional DMB workbook.
  * Returns: JSON string containing extracted functional KPI rows with exact metadata & values.
+ *
+ * Reads only the visible function tabs (1.Quality ... 12.FINANCE) and only the
+ * KPI table at the top of each tab, stopping at the Trends / Root Cause
+ * Analysis / Action tracker blocks below it. The hidden 'MasterSheet',
+ * 'MPR Review', 'Marketing June' and 'Sheet1 (2)' tabs are skipped, so old and
+ * broken (#REF!) copies never reach the Masterfile.
  */
 
 interface FunctionalKPIRow {
@@ -30,7 +36,33 @@ interface FunctionalKPIRow {
   nov: number | string;
   dec: number | string;
   dataType?: string;
+  category?: string;
 }
+
+/** A KPI and the Target / Actual values read from one function tab. */
+interface KPIBlock {
+  kpiName: string;
+  definition: string;
+  operator: string;
+  target2026: number | string;
+  unit: string;
+  nature: string;
+  frequency: string;
+  category: string;
+  isSubKpi: boolean;
+  groupIndex: number;
+  targetValues: (number | string)[];
+  actualValues: (number | string)[];
+}
+
+/** Tabs that never hold current KPI data. */
+const SKIP_SHEETS = ["mpr review", "mastersheet", "sheet1 (2)", "marketing june"];
+
+/** Everything below these headings is RCA / action-tracker content. */
+const STOP_HEADINGS = [
+  "trends", "root cause analysis", "paretos", "action tracker",
+  "if the kpi is reported", "handshake"
+];
 
 function main(workbook: ExcelScript.Workbook): string {
   console.log("Starting functional data extraction...");
@@ -46,11 +78,11 @@ function main(workbook: ExcelScript.Workbook): string {
   for (const sheet of worksheets) {
     const sName = sheet.getName().trim();
     const sNameLower = sName.toLowerCase();
-    if (sNameLower.includes("mpr review") || sNameLower.includes("sheet1")) continue;
 
-    // Check if sheet is a Functional tab
-    const isFunctional = functionalKeywords.some(k => sNameLower.includes(k));
-    if (!isFunctional && !sNameLower.includes("mastersheet")) continue;
+    // Only visible function tabs; hidden copies hold stale or #REF! data.
+    if (sheet.getVisibility() !== ExcelScript.SheetVisibility.visible) continue;
+    if (SKIP_SHEETS.indexOf(sNameLower) >= 0) continue;
+    if (!functionalKeywords.some(k => sNameLower.includes(k))) continue;
 
     const used = sheet.getUsedRange();
     if (!used) continue;
@@ -62,84 +94,40 @@ function main(workbook: ExcelScript.Workbook): string {
     // Locate header row
     let headerRowIdx = 4;
     for (let r = 0; r < Math.min(10, values.length); r++) {
-      const rowStr = values[r].map(v => String(v).toLowerCase()).join(" ");
-      if (rowStr.includes("kpi name") || rowStr.includes("mandatory kpi") || rowStr.includes("target/ actual") || rowStr.includes("jan")) {
+      const firstCell = String(values[r][0] || "").trim().toLowerCase();
+      if (firstCell === "kpi name" || firstCell.indexOf("mandatory kpi") === 0) {
         headerRowIdx = r;
         break;
       }
     }
 
-    const headerRow = values[headerRowIdx];
-    const monthCols = getMonthColumnIndexes(headerRow);
+    const monthCols = getMonthColumnIndexes(values[headerRowIdx]);
+    const blocks = readKPIBlocks(values, headerRowIdx, monthCols);
+    nameSubKpis(blocks);
 
-    let curKpi = "";
-    let curDef = "";
-    let curOp = ">=";
-    let curAop: number | string = "";
-    let curUnit = "%";
-    let curNat = "Higher the better";
-    let curFreq = "Monthly";
+    for (const block of blocks) {
+      let dType = "Whole Number";
+      if (block.unit === "%") dType = "Percentage";
+      else if (block.unit === "Mn" || block.unit === "K" || block.unit.toLowerCase().includes("decimal")) dType = "Decimal";
 
-    for (let r = headerRowIdx + 1; r < values.length; r++) {
-      const row = values[r];
-      const firstCell = String(row[0] || "").trim();
-
-      // Check if this row defines a new KPI
-      if (firstCell && !firstCell.toLowerCase().startsWith("value lever") && !firstCell.startsWith("#REF") && firstCell !== "None") {
-        curKpi = firstCell;
-        curDef = String(row[1] || "").trim();
-        curOp = String(row[2] || ">=").trim();
-        curAop = row[3] !== undefined && row[3] !== null ? row[3] : "";
-        curUnit = String(row[4] || "%").trim();
-        curNat = String(row[5] || "Higher the better").trim();
-        curFreq = String(row[6] || "Monthly").trim();
-      }
-
-      // Check Target or Actual row (Column H / index 7 in standard sheets)
-      let typeVal = String(row[7] || "").trim().toUpperCase();
-      if (!typeVal && row.length > 10) {
-        // In case Target/Actual is in column 10
-        typeVal = String(row[10] || "").trim().toUpperCase();
-      }
-
-      if ((typeVal === "TARGET" || typeVal === "ACTUAL" || typeVal === "T" || typeVal === "A") && curKpi) {
-        const getMonthVal = (mIdx: number): number | string => {
-          const cIdx = monthCols[mIdx];
-          if (cIdx !== undefined && cIdx < row.length) {
-            const v = row[cIdx];
-            return v !== null && v !== undefined && String(v) !== "#REF!" && String(v) !== "None" ? v : "";
-          }
-          return "";
-        };
-
-        let dType = "Whole Num";
-        if (curUnit === "%") dType = "Percentage";
-        else if (curUnit === "Mn" || curUnit === "K" || curUnit.toLowerCase().includes("decimal")) dType = "Decimal";
-
+      for (const rowType of ["Target", "Actual"]) {
+        const monthly = rowType === "Target" ? block.targetValues : block.actualValues;
         extractedRows.push({
           functionName: functionName,
           sourceSheet: sName,
-          kpiName: curKpi,
-          definition: curDef,
-          operator: curOp,
-          target2026: curAop,
-          unit: curUnit,
-          nature: curNat,
-          frequency: curFreq,
-          rowType: typeVal.startsWith("T") ? "Target" : "Actual",
-          jan: getMonthVal(0),
-          feb: getMonthVal(1),
-          mar: getMonthVal(2),
-          apr: getMonthVal(3),
-          may: getMonthVal(4),
-          jun: getMonthVal(5),
-          jul: getMonthVal(6),
-          aug: getMonthVal(7),
-          sep: getMonthVal(8),
-          oct: getMonthVal(9),
-          nov: getMonthVal(10),
-          dec: getMonthVal(11),
-          dataType: dType
+          kpiName: block.kpiName,
+          definition: block.definition,
+          operator: block.operator,
+          target2026: block.target2026,
+          unit: block.unit,
+          nature: block.nature,
+          frequency: block.frequency,
+          rowType: rowType === "Target" ? "Target" : "Actual",
+          jan: monthly[0], feb: monthly[1], mar: monthly[2], apr: monthly[3],
+          may: monthly[4], jun: monthly[5], jul: monthly[6], aug: monthly[7],
+          sep: monthly[8], oct: monthly[9], nov: monthly[10], dec: monthly[11],
+          dataType: dType,
+          category: block.category
         });
       }
     }
@@ -149,26 +137,180 @@ function main(workbook: ExcelScript.Workbook): string {
   return JSON.stringify(extractedRows);
 }
 
+/**
+ * Read the KPI table of one function tab.
+ * A KPI row carries its name in column A; a sub-KPI (for example the Z30 and
+ * Z90 complaint rates) leaves column A empty and names itself in the KPI
+ * definition, so it is kept with the KPI name of the row above it.
+ */
+function readKPIBlocks(
+  values: (string | number | boolean)[][],
+  headerRowIdx: number,
+  monthCols: { [monthIndex: number]: number }
+): KPIBlock[] {
+  const blocks: KPIBlock[] = [];
+  let category = "";
+  let groupIndex = -1;
+  let current: KPIBlock | null = null;
+
+  for (let r = headerRowIdx + 1; r < values.length; r++) {
+    const row = values[r];
+    const firstCell = String(row[0] || "").trim();
+    const firstLower = firstCell.toLowerCase();
+
+    if (STOP_HEADINGS.some(h => firstLower.indexOf(h) === 0)) break;
+
+    if (firstLower.indexOf("mandatory") >= 0 && firstLower.indexOf("kpi") >= 0) {
+      category = "Mandatory Outcome";
+      continue;
+    }
+    if (firstLower.indexOf("critical enabling") >= 0 || firstLower.indexOf("leading kpi") >= 0) {
+      category = "Critical Enabling";
+      continue;
+    }
+    if (firstLower === "kpi name" || firstCell.indexOf("#REF") === 0) continue;
+
+    const rowType = String(row[7] || "").trim().toLowerCase();
+    if (rowType !== "target" && rowType !== "actual") continue;
+
+    const monthly = readMonthValues(row, monthCols);
+
+    if (rowType === "target") {
+      const hasName = firstCell.length > 0;
+      const definition = String(row[1] || "").trim();
+
+      // A leftover template row: no KPI name and no definition. A real sub-KPI
+      // always names itself in the definition, e.g. "Complaint rate for Z30".
+      if (!hasName && !definition) {
+        current = null;
+        continue;
+      }
+
+      if (hasName) groupIndex++;
+      current = {
+        kpiName: hasName ? firstCell : (current ? current.kpiName : ""),
+        definition: String(row[1] || "").trim(),
+        operator: String(row[2] || ">=").trim(),
+        target2026: row[3] !== undefined && row[3] !== null ? row[3] : "",
+        unit: String(row[4] || "").trim(),
+        nature: String(row[5] || "").trim(),
+        frequency: String(row[6] || "").trim(),
+        category: category,
+        isSubKpi: !hasName,
+        groupIndex: groupIndex,
+        targetValues: monthly,
+        actualValues: ["", "", "", "", "", "", "", "", "", "", "", ""]
+      };
+      if (!current.kpiName) {
+        current = null;
+        continue;
+      }
+      // A sub-KPI inherits the settings its own row leaves empty.
+      const parent = blocks.length > 0 ? blocks[blocks.length - 1] : null;
+      if (current.isSubKpi && parent) {
+        if (!current.operator) current.operator = parent.operator;
+        if (current.target2026 === "") current.target2026 = parent.target2026;
+        if (!current.unit) current.unit = parent.unit;
+        if (!current.nature) current.nature = parent.nature;
+        if (!current.frequency) current.frequency = parent.frequency;
+      }
+      blocks.push(current);
+    } else if (current) {
+      current.actualValues = monthly;
+    }
+  }
+
+  // Drop empty template rows: no definition and not a single value.
+  return blocks.filter(block => {
+    const hasValue = block.targetValues.concat(block.actualValues).some(v => v !== "");
+    return hasValue || block.definition.length > 0;
+  });
+}
+
+/**
+ * Give each sub-KPI of a group its own name, e.g. "Complaint Rate of NPI
+ * products" with definitions "Complaint rate for Z10/Z30/Z90" becomes
+ * "Complaint Rate of NPI products Z10", "... Z30" and "... Z90".
+ */
+function nameSubKpis(blocks: KPIBlock[]): void {
+  const byGroup: { [groupIndex: number]: KPIBlock[] } = {};
+  for (const block of blocks) {
+    if (!byGroup[block.groupIndex]) byGroup[block.groupIndex] = [];
+    byGroup[block.groupIndex].push(block);
+  }
+
+  for (const key of Object.keys(byGroup)) {
+    const group = byGroup[Number(key)];
+    if (group.length < 2) continue;
+
+    for (const block of group) {
+      const shared: { [word: string]: boolean } = {};
+      for (const sibling of group) {
+        if (sibling === block) continue;
+        for (const word of sibling.definition.toLowerCase().split(/\s+/)) {
+          shared[word] = true;
+        }
+      }
+      const distinctive = block.definition.split(/\s+/)
+        .filter(word => word.length > 0 && !shared[word.toLowerCase()])
+        .slice(0, 3)
+        .join(" ");
+      if (distinctive) block.kpiName = `${block.kpiName} ${distinctive}`;
+    }
+  }
+}
+
+function readMonthValues(
+  row: (string | number | boolean)[],
+  monthCols: { [monthIndex: number]: number }
+): (number | string)[] {
+  const monthly: (number | string)[] = [];
+  for (let m = 0; m < 12; m++) {
+    const cIdx = monthCols[m];
+    let value: number | string = "";
+    if (cIdx !== undefined && cIdx < row.length) {
+      const raw = row[cIdx];
+      const text = String(raw);
+      if (raw !== null && raw !== undefined && text !== "" && text !== "#REF!" && text !== "None") {
+        value = raw as number | string;
+      }
+    }
+    monthly.push(value);
+  }
+  return monthly;
+}
+
+/**
+ * Map Jan..Dec to their column indexes. The review sheets hold real dates in
+ * the header row, which arrive as Excel serial numbers, so those are converted
+ * back to a month. Text headers such as "Jan-2026" are also supported.
+ */
 function getMonthColumnIndexes(headerRow: (string | number | boolean)[]): { [monthIndex: number]: number } {
   const prefixes = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
   const mapping: { [monthIndex: number]: number } = {};
 
-  for (let m = 0; m < prefixes.length; m++) {
-    const p = prefixes[m];
-    for (let c = 0; c < headerRow.length; c++) {
-      const val = String(headerRow[c] || "").trim().toLowerCase();
-      if (val.startsWith(p) || val.includes(`-${p}`) || val.includes(p)) {
+  for (let c = 0; c < headerRow.length; c++) {
+    const raw = headerRow[c];
+    if (typeof raw === "number" && raw > 40000 && raw < 60000) {
+      // Excel serial date -> month index (day 0 is 1899-12-30).
+      const asDate = new Date(Date.UTC(1899, 11, 30) + Math.round(raw) * 86400000);
+      const monthIndex = asDate.getUTCMonth();
+      if (mapping[monthIndex] === undefined) mapping[monthIndex] = c;
+      continue;
+    }
+    const text = String(raw || "").trim().toLowerCase();
+    if (!text) continue;
+    for (let m = 0; m < prefixes.length; m++) {
+      if (text.indexOf(prefixes[m]) === 0 && mapping[m] === undefined) {
         mapping[m] = c;
         break;
       }
     }
   }
 
-  // Fallback: If dates were numeric serials / Date objects, calendar columns in Functional review are columns 8 to 19
+  // Fallback: the calendar columns of a review sheet are I..T (8 to 19).
   for (let m = 0; m < 12; m++) {
-    if (mapping[m] === undefined) {
-      mapping[m] = 8 + m;
-    }
+    if (mapping[m] === undefined) mapping[m] = 8 + m;
   }
 
   return mapping;

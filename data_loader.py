@@ -74,6 +74,53 @@ def clean_text(value):
     return str(value).replace("\xa0", " ").strip()
 
 
+QUARTER_END_MONTHS = {"1": 3, "2": 6, "3": 9, "4": 12}
+
+
+def parse_month_label(label, default_year=2026):
+    """
+    Read a Masterfile month header.
+
+    Handles "Jan", "Jan-2026" and the quarter labels the Strategic sheet uses
+    for its quarter-end columns, such as "Q1'26", which stand for Mar and Jun.
+    """
+    text_value = clean_text(label)
+    if not text_value:
+        return pd.NaT
+
+    quarter = re.match(r"(?i)^q([1-4])", text_value)
+    if quarter:
+        year = default_year
+        year_match = re.search(r"(20\d{2})|['\s](\d{2})\b", text_value)
+        if year_match:
+            year = (
+                int(year_match.group(1))
+                if year_match.group(1)
+                else 2000 + int(year_match.group(2))
+            )
+        return pd.Timestamp(
+            year=year,
+            month=QUARTER_END_MONTHS[quarter.group(1)],
+            day=1,
+        )
+
+    month_date = pd.to_datetime(text_value, format="%b-%Y", errors="coerce")
+    if pd.isna(month_date):
+        month_date = pd.to_datetime(
+            f"{text_value}-{default_year}",
+            format="%b-%Y",
+            errors="coerce",
+        )
+    return month_date
+
+
+def cell_value(raw, row_number, column):
+    """Read a cell, returning "" when that column is not in the sheet."""
+    if column >= raw.shape[1]:
+        return ""
+    return raw.iat[row_number, column]
+
+
 def first_non_blank(series):
     for value in series:
         if pd.notna(value) and clean_text(value):
@@ -327,11 +374,7 @@ def load_mpr_data(excel_path=None):
             if not month_name or pd.isna(value):
                 continue
 
-            month_date = pd.to_datetime(
-                f"{month_name}-{reporting_year}",
-                format="%b-%Y",
-                errors="coerce",
-            )
+            month_date = parse_month_label(month_name, reporting_year)
 
             if pd.isna(month_date):
                 continue
@@ -347,7 +390,7 @@ def load_mpr_data(excel_path=None):
                     "metric_nature": clean_text(raw.iat[row_number, 6]),
                     "units": clean_text(raw.iat[row_number, 7]),
                     "frequency": clean_text(raw.iat[row_number, 8]) if raw.shape[1] > 8 else "",
-                    "data_type": clean_text(raw.iat[row_number, 22]) if raw.shape[1] > 22 else "Monthly",
+                    "data_type": clean_text(cell_value(raw, row_number, 22)),
                     "series": series_name,
                     "value": value,
                 }
@@ -414,11 +457,7 @@ def load_dmb_data(excel_path=EXCEL_PATH):
             if not month_name or pd.isna(value):
                 continue
 
-            month_date = pd.to_datetime(
-                month_name,
-                format="%b-%Y",
-                errors="coerce",
-            )
+            month_date = parse_month_label(month_name)
 
             if pd.isna(month_date):
                 continue
@@ -434,8 +473,8 @@ def load_dmb_data(excel_path=EXCEL_PATH):
                     "units": clean_text(raw.iat[row_number, 4]) if raw.shape[1] > 4 else "",
                     "metric_nature": clean_text(raw.iat[row_number, 5]) if raw.shape[1] > 5 else "",
                     "frequency": clean_text(raw.iat[row_number, 6]) if raw.shape[1] > 6 else "",
-                    "data_type": clean_text(raw.iat[row_number, 20]) if raw.shape[1] > 20 else "Monthly",
-                    "kpi_category": clean_text(raw.iat[row_number, 21]) if raw.shape[1] > 21 else "",
+                    "data_type": clean_text(cell_value(raw, row_number, 20)),
+                    "kpi_category": clean_text(cell_value(raw, row_number, 21)),
                     "series": series_name,
                     "value": value,
                 }

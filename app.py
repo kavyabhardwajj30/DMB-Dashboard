@@ -208,6 +208,26 @@ FUNCTION_SHEET_TO_DASHBOARD = {
     "finance": "Finance",
 }
 
+FUNCTION_ORDER = [
+    "Quality",
+    "Customer Service",
+    "Marketing",
+    "ISC & Procurement",
+    "Regulatory",
+    "R&D",
+]
+
+EXCLUDED_DMB_FUNCTIONS = {
+    "nar",
+    "europe",
+    "growth",
+    "finance",
+    "commercial excellence",
+    "isc",
+    "procurement",
+}
+
+
 
 def kpi_key(value):
     normalized = function_key(value)
@@ -1023,9 +1043,10 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
     - Automatically includes all completed months from January of the year up to
       the previous calendar month (e.g. in September 2026 -> Jan-Aug 2026;
       when October 2026 starts -> Jan-Sep 2026 automatically).
-    - Plus any months with actual data present in the dataset.
-    - Plus any months present in strategic/functional RCA actions.
-    - Default month is the latest month among available completed months or months with actuals.
+    - Capped at the previous completed calendar month (current month - 1).
+    - Plus any historical months with actual data present in the dataset (up to current month - 1).
+    - Plus any historical months present in strategic/functional RCA actions (up to current month - 1).
+    - Default month is the latest completed calendar month (current month - 1).
     """
     if reference_date is None:
         ref_dt = pd.Timestamp.now()
@@ -1049,13 +1070,21 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
 
     data_months = set()
     if data is not None and "month" in data.columns and "Actual" in data.columns:
-        if "Target" in data.columns:
-            actual_months = data.loc[
-                data["Actual"].notna() & data["Target"].notna(), "month"
+        active_data = data
+        if "function" in active_data.columns:
+            active_data = active_data[
+                ~active_data["function"].fillna("").astype(str).str.strip().str.lower().isin(EXCLUDED_DMB_FUNCTIONS)
+            ]
+        if "Target" in active_data.columns:
+            actual_months = active_data.loc[
+                active_data["Actual"].notna() & active_data["Target"].notna(), "month"
             ].dropna().unique()
         else:
-            actual_months = data.loc[data["Actual"].notna(), "month"].dropna().unique()
-        data_months.update(pd.Timestamp(m).replace(day=1) for m in actual_months)
+            actual_months = active_data.loc[active_data["Actual"].notna(), "month"].dropna().unique()
+        data_months.update(
+            pd.Timestamp(m).replace(day=1) for m in actual_months
+            if pd.Timestamp(m).replace(day=1) <= latest_completed_month
+        )
 
     if rca_actions_df is None:
         try:
@@ -1073,10 +1102,13 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
                 rca_actual_rows = rca_actions_df.loc[rca_actions_df["actual"].notna()]
             if not rca_actual_rows.empty and "reporting_month" in rca_actual_rows.columns:
                 rca_months = rca_actual_rows["reporting_month"].dropna().unique()
-                data_months.update(pd.Timestamp(m).replace(day=1) for m in rca_months)
+                data_months.update(
+                    pd.Timestamp(m).replace(day=1) for m in rca_months
+                    if pd.Timestamp(m).replace(day=1) <= latest_completed_month
+                )
 
-    all_months = sorted(calendar_months | data_months)
-    default_m = all_months[-1] if all_months else latest_completed_month
+    all_months = sorted(m for m in (calendar_months | data_months) if m <= latest_completed_month)
+    default_m = latest_completed_month if (latest_completed_month in all_months or not all_months) else all_months[-1]
     return all_months, default_m
 
 
@@ -1348,16 +1380,6 @@ def create_gauge(value):
 # =========================================================
 # DMB FUNCTION CARDS
 # =========================================================
-
-FUNCTION_ORDER = [
-    "Quality",
-    "Customer Service",
-    "Marketing",
-    "ISC & Procurement",
-    "Regulatory",
-    "R&D",
-]
-EXCLUDED_DMB_FUNCTIONS = {"nar", "europe", "growth"}
 
 
 def create_mini_gauge(value):
@@ -3184,16 +3206,10 @@ def get_dmb_function_cards_content(month_value):
     selected_month = pd.Timestamp(month_value)
     current = dmb_data[dmb_data["month"].eq(selected_month)].copy()
 
-    ordered_functions = list(FUNCTION_ORDER)
-
-    available_functions = [
-        f for f in current["function"].dropna().unique().tolist()
+    ordered_functions = [
+        f for f in FUNCTION_ORDER
         if str(f).strip().lower() not in EXCLUDED_DMB_FUNCTIONS
     ]
-
-    for function_name in available_functions:
-        if function_name not in ordered_functions:
-            ordered_functions.append(function_name)
 
     if not ordered_functions:
         return html.P(
