@@ -1469,11 +1469,15 @@ def create_mini_gauge(value):
 
 
 def create_function_card(function_name, current_data):
-    function_rows = (
-        current_data[current_data["function"].eq(function_name)].copy()
-        if not current_data.empty and "function" in current_data.columns
-        else pd.DataFrame()
-    )
+    if not current_data.empty and "function" in current_data.columns:
+        if function_name == "ISC & Procurement":
+            function_rows = current_data[
+                current_data["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
+            ].copy()
+        else:
+            function_rows = current_data[current_data["function"].eq(function_name)].copy()
+    else:
+        function_rows = pd.DataFrame()
 
     valid = (
         function_rows[
@@ -2473,10 +2477,16 @@ def create_continuous_red_detail(function_name, selected_month):
     selected_function_key = function_key(function_name)
     active_dmb = get_active_dmb_data()
 
-    current_rows = active_dmb[
-        active_dmb["month"].eq(selected_month)
-        & active_dmb["function"].eq(function_name)
-    ].copy()
+    if function_name == "ISC & Procurement":
+        current_rows = active_dmb[
+            active_dmb["month"].eq(selected_month)
+            & active_dmb["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
+        ].copy()
+    else:
+        current_rows = active_dmb[
+            active_dmb["month"].eq(selected_month)
+            & active_dmb["function"].eq(function_name)
+        ].copy()
     red_rows = current_rows[
         current_rows["status"].eq("Not Met")
     ].copy()
