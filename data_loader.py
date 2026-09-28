@@ -346,8 +346,8 @@ def load_mpr_data(excel_path=None):
                     "aop_2026": raw.iat[row_number, 3],
                     "metric_nature": clean_text(raw.iat[row_number, 6]),
                     "units": clean_text(raw.iat[row_number, 7]),
-                    "frequency": clean_text(raw.iat[row_number, 8]),
-                    "data_type": clean_text(raw.iat[row_number, 22]),
+                    "frequency": clean_text(raw.iat[row_number, 8]) if raw.shape[1] > 8 else "",
+                    "data_type": clean_text(raw.iat[row_number, 22]) if raw.shape[1] > 22 else "Monthly",
                     "series": series_name,
                     "value": value,
                 }
@@ -401,7 +401,7 @@ def load_dmb_data(excel_path=EXCEL_PATH):
             }
             continue
 
-        row_type = clean_text(raw.iat[row_number, 7]).lower()
+        row_type = clean_text(raw.iat[row_number, 7]).lower() if raw.shape[1] > 7 else ""
 
         if row_type not in {"target", "actual"}:
             continue
@@ -428,14 +428,14 @@ def load_dmb_data(excel_path=EXCEL_PATH):
                     "function": current_function,
                     "kpi_name": first_cell,
                     "month": month_date,
-                    "definition": clean_text(raw.iat[row_number, 1]),
-                    "operator": clean_text(raw.iat[row_number, 2]),
-                    "target_aop_2026": raw.iat[row_number, 3],
-                    "units": clean_text(raw.iat[row_number, 4]),
-                    "metric_nature": clean_text(raw.iat[row_number, 5]),
-                    "frequency": clean_text(raw.iat[row_number, 6]),
-                    "data_type": clean_text(raw.iat[row_number, 20]),
-                    "kpi_category": clean_text(raw.iat[row_number, 21]),
+                    "definition": clean_text(raw.iat[row_number, 1]) if raw.shape[1] > 1 else "",
+                    "operator": clean_text(raw.iat[row_number, 2]) if raw.shape[1] > 2 else "",
+                    "target_aop_2026": raw.iat[row_number, 3] if raw.shape[1] > 3 else None,
+                    "units": clean_text(raw.iat[row_number, 4]) if raw.shape[1] > 4 else "",
+                    "metric_nature": clean_text(raw.iat[row_number, 5]) if raw.shape[1] > 5 else "",
+                    "frequency": clean_text(raw.iat[row_number, 6]) if raw.shape[1] > 6 else "",
+                    "data_type": clean_text(raw.iat[row_number, 20]) if raw.shape[1] > 20 else "Monthly",
+                    "kpi_category": clean_text(raw.iat[row_number, 21]) if raw.shape[1] > 21 else "",
                     "series": series_name,
                     "value": value,
                 }

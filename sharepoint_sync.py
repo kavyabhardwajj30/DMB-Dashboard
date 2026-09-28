@@ -448,6 +448,27 @@ class SharePointSyncManager:
                 else:
                     synced_sources[target_name] = f"Up to date ({source_desc})"
 
+        # 3. Auto-Consolidate Masterfile if Functional Review or Strategic Execution was updated
+        func_file_name = TARGET_FILENAMES["functional_review"]
+        strat_file_name = TARGET_FILENAMES["strategic_execution"]
+        master_file_name = TARGET_FILENAMES["masterfile"]
+
+        if (func_file_name in updated_files or strat_file_name in updated_files) and master_file_name not in updated_files:
+            try:
+                from scripts.sync_to_masterfile import sync_masterfile
+                sync_res = sync_masterfile()
+                if sync_res.get("success"):
+                    updated_files.append(master_file_name)
+                    synced_sources[master_file_name] = "Auto-Consolidated from Updated Functional/Strategic Files"
+                    m_path = DATA_DIR / master_file_name
+                    if m_path.exists():
+                        self._file_hashes[master_file_name] = get_file_sha256(read_file_safe_bytes(m_path))
+                        # Also push to GitHub if configured
+                        email_sync.push_to_github_if_configured(master_file_name, read_file_safe_bytes(m_path))
+                    logger.info("Auto-consolidated %s after source files updated.", master_file_name)
+            except Exception as e:
+                errors.append(f"Auto-consolidation error: {e}")
+
         self._last_sync_time = time.time()
         has_updates = len(updated_files) > 0
 
