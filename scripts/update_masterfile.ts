@@ -41,13 +41,27 @@ interface KPIRow {
 function main(workbook: ExcelScript.Workbook, functionalJson?: string, strategicJson?: string): { dmbRows: number; mprRows: number; status: string } {
   console.log("Starting Masterfile sync with exact Mastersheet styling...");
 
+  // Safety check: if run manually in Excel without Power Automate parameters
+  const hasFunctionalInput = functionalJson && functionalJson.trim().length > 2;
+  const hasStrategicInput = strategicJson && strategicJson.trim().length > 2;
+
+  if (!hasFunctionalInput && !hasStrategicInput) {
+    const msg = "Notice: 'Update_Masterfile' requires JSON inputs from Power Automate (Step 1 & Step 2). When clicked manually in Excel, no data is passed. Please run the Power Automate flow to execute the sync.";
+    console.warn(msg);
+    return {
+      dmbRows: 0,
+      mprRows: 0,
+      status: msg
+    };
+  }
+
   let dmbRowsCount = 0;
   let mprRowsCount = 0;
 
   // 1. Process Functional Review Data into 'DMB Masterfile'
-  if (functionalJson && functionalJson.trim().length > 2) {
+  if (hasFunctionalInput) {
     try {
-      const functionalRows: KPIRow[] = JSON.parse(functionalJson);
+      const functionalRows: KPIRow[] = JSON.parse(functionalJson!);
       let dmbSheet = workbook.getWorksheet("DMB Masterfile");
       if (!dmbSheet) {
         dmbSheet = workbook.addWorksheet("DMB Masterfile");
@@ -60,9 +74,9 @@ function main(workbook: ExcelScript.Workbook, functionalJson?: string, strategic
   }
 
   // 2. Process Strategic Execution Data into 'MPR Masterfile'
-  if (strategicJson && strategicJson.trim().length > 2) {
+  if (hasStrategicInput) {
     try {
-      const strategicRows: KPIRow[] = JSON.parse(strategicJson);
+      const strategicRows: KPIRow[] = JSON.parse(strategicJson!);
       let mprSheet = workbook.getWorksheet("MPR Masterfile");
       if (!mprSheet) {
         mprSheet = workbook.addWorksheet("MPR Masterfile");
