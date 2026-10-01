@@ -47,6 +47,15 @@ interface KPIRow {
   jul: Cell; aug: Cell; sep: Cell; oct: Cell; nov: Cell; dec: Cell;
   dataType?: string;
   category?: string;
+  /** Number format of target2026 and of Jan..Dec as in the source ("" = none). */
+  target2026Format: string;
+  formats: string[];
+}
+
+/** A source cell: its value and the number format Excel shows it with. */
+interface SourceCell {
+  value: Cell;
+  format: string;
 }
 
 const MONTH_PREFIXES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -58,25 +67,47 @@ function dataTypeForUnit(unit: string): string {
   return "Whole Number";
 }
 
-function readMonthValues(row: Cell[], monthCols: { [monthIndex: number]: number }): Cell[] {
-  const monthly: Cell[] = [];
+const NO_CELL: SourceCell = { value: "", format: "" };
+
+/**
+ * A source cell exactly as Excel shows it: the value with its own number
+ * format, so the Masterfile shows 92% as 92%, 92.00% as 92.00% and 91 as 91.
+ * The only change: a percentage typed as text ("90%%", "90%") becomes 0.9
+ * shown as 90%, with a single % sign.
+ */
+function sourceCell(raw: Cell | undefined | null, format: string | undefined): SourceCell {
+  if (raw === null || raw === undefined) return NO_CELL;
+  const text = String(raw).trim();
+  if (text === "" || text === "#REF!" || text === "None") return NO_CELL;
+  if (typeof raw !== "string") return { value: raw, format: format || "General" };
+
+  const percent = text.match(/^(-?\d+(?:\.(\d+))?)\s*%+$/);
+  if (percent) {
+    const decimals = Math.min(2, percent[2] ? percent[2].length : 0);
+    return {
+      value: Number((Number(percent[1]) / 100).toPrecision(12)),
+      format: decimals === 0 ? "0%" : (decimals === 1 ? "0.0%" : "0.00%")
+    };
+  }
+  // Other text keeps the Masterfile cell's format.
+  return { value: text.indexOf("%%") >= 0 ? text.replace(/%{2,}/g, "%") : raw, format: "" };
+}
+
+function readMonthValues(row: Cell[], formats: string[], monthCols: { [monthIndex: number]: number }): SourceCell[] {
+  const monthly: SourceCell[] = [];
   for (let m = 0; m < 12; m++) {
     const c = monthCols[m];
-    let value: Cell = "";
-    if (c !== undefined && c < row.length) {
-      const raw = row[c];
-      const text = String(raw);
-      if (raw !== null && raw !== undefined && text !== "" && text !== "#REF!" && text !== "None") value = raw;
-    }
-    monthly.push(value);
+    monthly.push(c !== undefined && c < row.length ? sourceCell(row[c], formats[c]) : NO_CELL);
   }
   return monthly;
 }
 
-function withMonths(base: KPIRow, monthly: Cell[]): KPIRow {
-  base.jan = monthly[0]; base.feb = monthly[1]; base.mar = monthly[2]; base.apr = monthly[3];
-  base.may = monthly[4]; base.jun = monthly[5]; base.jul = monthly[6]; base.aug = monthly[7];
-  base.sep = monthly[8]; base.oct = monthly[9]; base.nov = monthly[10]; base.dec = monthly[11];
+function withMonths(base: KPIRow, monthly: SourceCell[]): KPIRow {
+  const v = monthly.map(cell => cell.value);
+  base.jan = v[0]; base.feb = v[1]; base.mar = v[2]; base.apr = v[3];
+  base.may = v[4]; base.jun = v[5]; base.jul = v[6]; base.aug = v[7];
+  base.sep = v[8]; base.oct = v[9]; base.nov = v[10]; base.dec = v[11];
+  base.formats = monthly.map(cell => cell.format);
   return base;
 }
 
@@ -102,15 +133,15 @@ interface KPIBlock {
   kpiName: string;
   definition: string;
   operator: string;
-  target2026: Cell;
+  target2026: SourceCell;
   unit: string;
   nature: string;
   frequency: string;
   category: string;
   isSubKpi: boolean;
   groupIndex: number;
-  targetValues: Cell[];
-  actualValues: Cell[];
+  targetValues: SourceCell[];
+  actualValues: SourceCell[];
 }
 
 function extractFunctional(workbook: ExcelScript.Workbook): KPIRow[] {
@@ -128,9 +159,11 @@ function extractFunctional(workbook: ExcelScript.Workbook): KPIRow[] {
     const used = sheet.getUsedRange(true);
     if (!used) continue;
     // Read from A1 so row/column positions match the sheet.
-    const values = sheet.getRangeByIndexes(0, 0,
+    const range = sheet.getRangeByIndexes(0, 0,
       used.getRowIndex() + used.getRowCount(),
-      Math.max(20, used.getColumnIndex() + used.getColumnCount())).getValues() as Cell[][];
+      Math.max(20, used.getColumnIndex() + used.getColumnCount()));
+    const values = range.getValues() as Cell[][];
+    const formats = range.getNumberFormats() as string[][];
     if (values.length < 5) continue;
 
     let headerRow = 4;
@@ -143,7 +176,7 @@ function extractFunctional(workbook: ExcelScript.Workbook): KPIRow[] {
     }
 
     const functionName = cleanFunctionName(sheetName);
-    const blocks = readKPIBlocks(values, headerRow, functionalMonthColumns(values[headerRow]));
+    const blocks = readKPIBlocks(values, formats, headerRow, functionalMonthColumns(values[headerRow]));
     nameSubKpis(blocks);
 
     for (const block of blocks) {
@@ -154,7 +187,7 @@ function extractFunctional(workbook: ExcelScript.Workbook): KPIRow[] {
           kpiName: block.kpiName,
           definition: block.definition,
           operator: block.operator,
-          target2026: block.target2026,
+          target2026: block.target2026.value,
           unit: block.unit,
           nature: block.nature,
           frequency: block.frequency,
@@ -162,7 +195,9 @@ function extractFunctional(workbook: ExcelScript.Workbook): KPIRow[] {
           jan: "", feb: "", mar: "", apr: "", may: "", jun: "",
           jul: "", aug: "", sep: "", oct: "", nov: "", dec: "",
           dataType: dataTypeForUnit(block.unit),
-          category: block.category
+          category: block.category,
+          target2026Format: block.target2026.format,
+          formats: []
         }, isTarget ? block.targetValues : block.actualValues));
       }
     }
@@ -175,7 +210,12 @@ function extractFunctional(workbook: ExcelScript.Workbook): KPIRow[] {
  * column A; a sub-KPI (e.g. the Z30 and Z90 complaint rates) leaves column A
  * empty and names itself in the definition.
  */
-function readKPIBlocks(values: Cell[][], headerRow: number, monthCols: { [m: number]: number }): KPIBlock[] {
+function readKPIBlocks(
+  values: Cell[][],
+  formats: string[][],
+  headerRow: number,
+  monthCols: { [m: number]: number }
+): KPIBlock[] {
   const blocks: KPIBlock[] = [];
   let category = "";
   let groupIndex = -1;
@@ -206,7 +246,6 @@ function readKPIBlocks(values: Cell[][], headerRow: number, monthCols: { [m: num
 
     const rowType = String(row[7] || "").trim().toLowerCase();
     if (rowType !== "target" && rowType !== "actual") continue;
-    const monthly = readMonthValues(row, monthCols);
 
     if (rowType === "target") {
       const hasName = first.length > 0;
@@ -221,15 +260,15 @@ function readKPIBlocks(values: Cell[][], headerRow: number, monthCols: { [m: num
         kpiName: hasName ? first : (current ? current.kpiName : ""),
         definition: definition,
         operator: String(row[2] || "").trim(),
-        target2026: row[3] !== undefined && row[3] !== null ? row[3] : "",
+        target2026: sourceCell(row[3], formats[r][3]),
         unit: String(row[4] || "").trim(),
         nature: String(row[5] || "").trim(),
         frequency: String(row[6] || "").trim(),
         category: category,
         isSubKpi: !hasName,
         groupIndex: groupIndex,
-        targetValues: monthly,
-        actualValues: ["", "", "", "", "", "", "", "", "", "", "", ""]
+        targetValues: readMonthValues(row, formats[r], monthCols),
+        actualValues: readMonthValues([], [], monthCols)
       };
       if (!next.kpiName) {
         current = null;
@@ -239,7 +278,7 @@ function readKPIBlocks(values: Cell[][], headerRow: number, monthCols: { [m: num
       const parent = blocks.length > 0 ? blocks[blocks.length - 1] : null;
       if (next.isSubKpi && parent) {
         if (!next.operator) next.operator = parent.operator;
-        if (next.target2026 === "") next.target2026 = parent.target2026;
+        if (next.target2026.value === "") next.target2026 = parent.target2026;
         if (!next.unit) next.unit = parent.unit;
         if (!next.nature) next.nature = parent.nature;
         if (!next.frequency) next.frequency = parent.frequency;
@@ -248,13 +287,13 @@ function readKPIBlocks(values: Cell[][], headerRow: number, monthCols: { [m: num
       blocks.push(next);
       current = next;
     } else if (current) {
-      current.actualValues = monthly;
+      current.actualValues = readMonthValues(row, formats[r], monthCols);
     }
   }
 
   // Drop empty template rows: no definition and not a single value.
   return blocks.filter(block =>
-    block.definition.length > 0 || block.targetValues.concat(block.actualValues).some(v => v !== ""));
+    block.definition.length > 0 || block.targetValues.concat(block.actualValues).some(cell => cell.value !== ""));
 }
 
 /**
@@ -342,9 +381,11 @@ function extractStrategic(sheet: ExcelScript.Worksheet): KPIRow[] {
   const rows: KPIRow[] = [];
   const used = sheet.getUsedRange(true);
   if (!used) return rows;
-  const values = sheet.getRangeByIndexes(0, 0,
+  const range = sheet.getRangeByIndexes(0, 0,
     used.getRowIndex() + used.getRowCount(),
-    Math.max(23, used.getColumnIndex() + used.getColumnCount())).getValues() as Cell[][];
+    Math.max(23, used.getColumnIndex() + used.getColumnCount()));
+  const values = range.getValues() as Cell[][];
+  const formats = range.getNumberFormats() as string[][];
 
   let headerRow = 4;
   for (let r = 0; r < Math.min(10, values.length); r++) {
@@ -360,7 +401,7 @@ function extractStrategic(sheet: ExcelScript.Worksheet): KPIRow[] {
   let kpi = "";
   let owner = "";
   let definition = "";
-  let aop: Cell = "";
+  let aop: SourceCell = NO_CELL;
   let column1 = "";
   let column2 = "";
   let nature = "Higher the better";
@@ -389,7 +430,7 @@ function extractStrategic(sheet: ExcelScript.Worksheet): KPIRow[] {
     if (isTarget && !isHeading) {
       if (String(row[2] || "").trim()) owner = String(row[2]).trim();
       if (String(row[3] || "").trim()) definition = String(row[3]).trim();
-      if (row[4] !== undefined && row[4] !== null && String(row[4]).trim() !== "") aop = row[4];
+      if (row[4] !== undefined && row[4] !== null && String(row[4]).trim() !== "") aop = sourceCell(row[4], formats[r][4]);
       column1 = String(row[5] || "").trim();
       column2 = String(row[6] || "").trim();
       if (String(row[7] || "").trim()) nature = String(row[7]).trim();
@@ -404,7 +445,9 @@ function extractStrategic(sheet: ExcelScript.Worksheet): KPIRow[] {
         kpiName: kpi,
         owner: owner,
         definition: definition,
-        target2026: aop,
+        target2026: aop.value,
+        target2026Format: aop.format,
+        formats: [],
         column1: column1,
         column2: column2,
         nature: nature,
@@ -414,7 +457,7 @@ function extractStrategic(sheet: ExcelScript.Worksheet): KPIRow[] {
         jan: "", feb: "", mar: "", apr: "", may: "", jun: "",
         jul: "", aug: "", sep: "", oct: "", nov: "", dec: "",
         dataType: dataTypeForUnit(unit)
-      }, readMonthValues(row, monthCols)));
+      }, readMonthValues(row, formats[r], monthCols)));
     }
   }
   return rows;

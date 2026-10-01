@@ -1041,12 +1041,13 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
     """
     Returns (available_months, default_month) dynamically:
     - Automatically includes all completed months from January of the year up to
-      the previous calendar month (e.g. in September 2026 -> Jan-Aug 2026;
-      when October 2026 starts -> Jan-Sep 2026 automatically).
-    - Capped at the previous completed calendar month (current month - 1).
-    - Plus any historical months with actual data present in the dataset (up to current month - 1).
-    - Plus any historical months present in strategic/functional RCA actions (up to current month - 1).
-    - Default month is the latest completed calendar month (current month - 1).
+      the target reporting month (current month - 2).
+      (e.g. in October 2026 -> Jan-Aug 2026;
+       when November 2026 starts -> Jan-Sep 2026 automatically).
+    - Capped at the target reporting month (current month - 2).
+    - Plus any historical months with actual data present in the dataset (up to current month - 2).
+    - Plus any historical months present in strategic/functional RCA actions (up to current month - 2).
+    - Default month is current month - 2.
     """
     if reference_date is None:
         ref_dt = pd.Timestamp.now()
@@ -1054,9 +1055,10 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
         ref_dt = pd.Timestamp(reference_date)
 
     current_month_start = pd.Timestamp(year=ref_dt.year, month=ref_dt.month, day=1)
-    latest_completed_month = (current_month_start - pd.DateOffset(months=1)).floor("D")
+    latest_completed_month = (current_month_start - pd.DateOffset(months=2)).floor("D")
 
-    start_month = pd.Timestamp(year=ref_dt.year, month=1, day=1)
+    start_year_month = pd.Timestamp(year=latest_completed_month.year, month=1, day=1)
+    start_month = start_year_month
     if data is not None and "month" in data.columns and not data["month"].dropna().empty:
         min_m = data["month"].dropna().min()
         if pd.notna(min_m) and pd.Timestamp(min_m) < start_month:
