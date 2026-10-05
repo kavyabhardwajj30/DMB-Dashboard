@@ -1268,9 +1268,13 @@ def section_header(
     elif default_value is None:
         default_value = default_month.strftime("%Y-%m-%d")
 
+    title_children = [html.H2(title)]
+    if subtitle:
+        title_children.append(html.P(subtitle))
+
     return html.Div(
         [
-            html.Div([html.H2(title), html.P(subtitle)]),
+            html.Div(title_children),
             html.Div(
                 [
                     html.Label(filter_label),
@@ -1471,15 +1475,31 @@ def create_mini_gauge(value):
 
 
 def create_function_card(function_name, current_data):
+    active_dmb = get_active_dmb_data()
     if not current_data.empty and "function" in current_data.columns:
         if function_name == "ISC & Procurement":
             function_rows = current_data[
                 current_data["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
             ].copy()
+            known_kpis = set(
+                active_dmb[
+                    active_dmb["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
+                ]["kpi_name"].dropna().unique()
+            ) if not active_dmb.empty and "function" in active_dmb.columns else set()
         else:
             function_rows = current_data[current_data["function"].eq(function_name)].copy()
+            known_kpis = set(
+                active_dmb[
+                    active_dmb["function"].eq(function_name)
+                ]["kpi_name"].dropna().unique()
+            ) if not active_dmb.empty and "function" in active_dmb.columns else set()
     else:
         function_rows = pd.DataFrame()
+        known_kpis = set()
+
+    month_kpis = set(function_rows["kpi_name"].dropna().unique()) if not function_rows.empty and "kpi_name" in function_rows.columns else set()
+    all_kpis = known_kpis.union(month_kpis)
+    total_expected = max(len(all_kpis), len(function_rows))
 
     valid = (
         function_rows[
@@ -1489,6 +1509,59 @@ def create_function_card(function_name, current_data):
         if not function_rows.empty
         else pd.DataFrame()
     )
+
+    met = int(valid["is_met"].sum()) if not valid.empty else 0
+    not_met = int(valid["status"].eq("Not Met").sum()) if not valid.empty else 0
+    filled = met + not_met
+    not_filled = max(0, total_expected - filled)
+    total = filled + not_filled
+
+    if total > 0:
+        met_share = met / total * 100
+        not_met_share = not_met / total * 100
+        not_filled_share = not_filled / total * 100
+    else:
+        met_share = 0
+        not_met_share = 0
+        not_filled_share = 100
+
+    bar_segments = []
+    if met > 0:
+        bar_segments.append(
+            html.Div(
+                str(met),
+                className="function-bar-met",
+                style={"width": f"{met_share}%"},
+                title=f"{met} KPIs met",
+            )
+        )
+    if not_met > 0:
+        bar_segments.append(
+            html.Div(
+                str(not_met),
+                className="function-bar-not-met",
+                style={"width": f"{not_met_share}%"},
+                title=f"{not_met} KPIs not met",
+            )
+        )
+    if not_filled > 0:
+        bar_segments.append(
+            html.Div(
+                str(not_filled),
+                className="function-bar-not-filled",
+                style={"width": f"{not_filled_share}%"},
+                title=f"{not_filled} KPIs not filled",
+            )
+        )
+    if not bar_segments:
+        bar_segments.append(
+            html.Div(
+                "0",
+                className="function-bar-not-filled",
+                style={"width": "100%"},
+                title="0 KPIs",
+            )
+        )
 
     if valid.empty:
         return html.Div(
@@ -1505,13 +1578,7 @@ def create_function_card(function_name, current_data):
                     className="function-card-subtitle",
                 ),
                 html.Div(
-                    [
-                        html.Div(
-                            "0",
-                            className="function-bar-met",
-                            style={"width": "100%", "background": "#dce6ed", "color": "#768b9c"},
-                        ),
-                    ],
+                    bar_segments,
                     className="function-stacked-bar",
                 ),
                 html.Div(
@@ -1561,16 +1628,8 @@ def create_function_card(function_name, current_data):
             className="function-card",
         )
 
-    total = len(valid)
-    met = int(valid["is_met"].sum())
-    not_met = int(valid["status"].eq("Not Met").sum())
-    improved = int(valid["is_improved"].sum())
-    continuous_red = int(valid["is_continuous_red"].sum())
     positive = int(valid["is_met_or_improved"].sum())
-
-    performance = positive / total * 100 if total else 0
-    met_share = met / total * 100 if total else 0
-    not_met_share = not_met / total * 100 if total else 0
+    performance = positive / len(valid) * 100 if len(valid) else 0
 
     comparison = valid[
         valid["previous_status"].isin(["Met", "Not Met"])
@@ -1611,18 +1670,7 @@ def create_function_card(function_name, current_data):
                 className="function-card-subtitle",
             ),
             html.Div(
-                [
-                    html.Div(
-                        str(met),
-                        className="function-bar-met",
-                        style={"width": f"{met_share}%"},
-                    ),
-                    html.Div(
-                        str(not_met),
-                        className="function-bar-not-met",
-                        style={"width": f"{not_met_share}%"},
-                    ),
-                ],
+                bar_segments,
                 className="function-stacked-bar",
             ),
             html.Div(
@@ -3527,7 +3575,7 @@ def serve_layout():
                     section_header(
                         "dmb-section",
                         "DMB — Function-wise KPI Performance",
-                        "Core, enabling and mandatory outcome performance",
+                        None,
                         "DMB month",
                         "dmb-month-filter",
                         create_month_options(curr_dmb_months),
@@ -3550,6 +3598,15 @@ def serve_layout():
                                         className="legend-dot legend-red"
                                     ),
                                     html.Span("KPIs not met"),
+                                ],
+                                className="dmb-legend-item",
+                            ),
+                            html.Div(
+                                [
+                                    html.Span(
+                                        className="legend-dot legend-not-filled"
+                                    ),
+                                    html.Span("KPIs not filled"),
                                 ],
                                 className="dmb-legend-item",
                             ),

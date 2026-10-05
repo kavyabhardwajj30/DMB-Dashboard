@@ -30,6 +30,11 @@
     background: #dc3d56;
 }
 
+.legend-not-filled,
+.legend-gray {
+    background: #8da2b5;
+}
+
 .legend-blue {
     background: #0877b9;
 }
@@ -128,7 +133,8 @@
 }
 
 .function-bar-met,
-.function-bar-not-met {
+.function-bar-not-met,
+.function-bar-not-filled {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -138,6 +144,8 @@
     color: #ffffff;
     font-size: 14px;
     font-weight: 700;
+    transition: width 0.3s ease;
+    user-select: none;
 }
 
 .function-bar-met {
@@ -146,6 +154,11 @@
 
 .function-bar-not-met {
     background: #dc3d56;
+}
+
+.function-bar-not-filled {
+    background: #8da2b5;
+    color: #ffffff;
 }
 
 .function-stat-grid {
