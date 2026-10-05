@@ -113,11 +113,17 @@ textarea {
     white-space: nowrap;
 }
 
-.header-reporting-month {
-    color: #c7e5f8;
-    font-weight: 600;
-    font-size: 24px;
-    margin-left: 4px;
+.top-nav-actions {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.header-month-dropdown {
+    width: 205px;
+    min-width: 205px;
 }
 
 .brand-text p {
@@ -165,26 +171,29 @@ textarea {
 }
 
 .download-button {
-    justify-self: end;
-    min-width: 158px;
-    min-height: 52px;
-    padding: 12px 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    height: 42px;
+    padding: 0 18px;
     border: 0;
-    border-radius: 11px;
+    border-radius: 9px;
     background: #ffffff;
     color: var(--navy) !important;
     cursor: pointer;
-    font-size: 17px;
-    font-weight: 750;
-    box-shadow: 0 7px 18px rgba(3, 43, 74, 0.15);
+    font-size: 15px;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(3, 43, 74, 0.12);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    white-space: nowrap;
 }
 
 .download-button:hover,
 .download-button:focus-visible {
     outline: none;
-    transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(3, 43, 74, 0.22);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(3, 43, 74, 0.18);
 }
 
 /* =========================================================

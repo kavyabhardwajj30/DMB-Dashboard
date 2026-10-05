@@ -6,7 +6,9 @@ import re
 import threading
 from zipfile import BadZipFile
 
+import dash
 from dash import ALL, Dash, Input, Output, State, ctx, dcc, html, no_update
+from dash.exceptions import PreventUpdate
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 import pandas as pd
@@ -3264,7 +3266,6 @@ def get_mpr_dashboard_content(month_value):
             "No continuous-red KPI identified.",
         ),
         len(concern_text),
-        f" — {selected_month.strftime('%B %Y')}",
     )
 
 
@@ -3361,25 +3362,31 @@ def serve_layout():
                 [
                     html.Div(
                         [
-                            html.H1(
-                                [
-                                    "MoS DMB Performance Review - AOP Critical",
-                                    html.Span(
-                                        mpr_init[16],
-                                        id="header-reporting-month",
-                                        className="header-reporting-month",
-                                    ),
-                                ]
-                            ),
+                            html.H1("MoS DMB Performance Review - AOP Critical"),
                         ],
                         className="brand-text",
                     ),
-                    html.Button(
-                        "Download 1 Pager",
-                        id="download-one-pager-button",
-                        className="download-button",
-                        n_clicks=0,
-                        title="Download the complete dashboard as one long PNG image",
+                    html.Div(
+                        [
+                            dcc.Dropdown(
+                                id="header-month-filter",
+                                options=create_month_options(curr_mpr_months),
+                                value=mpr_str,
+                                clearable=False,
+                                searchable=False,
+                                optionHeight=40,
+                                maxHeight=280,
+                                className="section-month-dropdown header-month-dropdown",
+                            ),
+                            html.Button(
+                                "Download 1 Pager",
+                                id="download-one-pager-button",
+                                className="download-button",
+                                n_clicks=0,
+                                title="Download the complete dashboard as one long PNG image",
+                            ),
+                        ],
+                        className="top-nav-actions",
                     ),
                 ],
                 className="top-navigation",
@@ -3721,6 +3728,7 @@ def handle_live_sync_trigger(n_intervals):
 
 @app.callback(
     Output("mpr-month-filter", "options"),
+    Output("header-month-filter", "options"),
     Output("dmb-month-filter", "options"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,
@@ -3733,11 +3741,37 @@ def refresh_month_dropdown_options(sync_data):
     curr_mpr_months, _ = get_dynamic_reporting_months(active_mpr, active_strat)
     curr_dmb_months, _ = get_dynamic_reporting_months(active_dmb, active_strat)
 
-    return create_month_options(curr_mpr_months), create_month_options(curr_dmb_months)
+    mpr_opts = create_month_options(curr_mpr_months)
+    return mpr_opts, mpr_opts, create_month_options(curr_dmb_months)
+
+
+@app.callback(
+    Output("header-month-filter", "value"),
+    Output("mpr-month-filter", "value"),
+    Output("dmb-month-filter", "value"),
+    Input("header-month-filter", "value"),
+    Input("mpr-month-filter", "value"),
+    Input("dmb-month-filter", "value"),
+    prevent_initial_call=True,
+)
+def sync_all_month_filters(header_val, mpr_val, dmb_val):
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+            if triggered_id == "header-month-filter" and header_val:
+                return no_update, header_val, header_val
+            elif triggered_id == "mpr-month-filter" and mpr_val:
+                return mpr_val, no_update, mpr_val
+            elif triggered_id == "dmb-month-filter" and dmb_val:
+                return dmb_val, dmb_val, no_update
+    except Exception:
+        pass
+    raise PreventUpdate
 
 
 # =========================================================
-# MPR CALLBACK
+# MPR CALLBACK (Executive MoS & Imperative Performance)
 # =========================================================
 
 @app.callback(
@@ -3757,37 +3791,85 @@ def refresh_month_dropdown_options(sync_data):
     Output("lowlights-count", "children"),
     Output("concerns-content", "children"),
     Output("concerns-count", "children"),
-    Output("header-reporting-month", "children"),
+    Input("header-month-filter", "value"),
     Input("mpr-month-filter", "value"),
-    Input("live-sync-state-store", "data"),
-    prevent_initial_call=True,
-)
-def update_mpr_dashboard(month_value, sync_data):
-    return get_mpr_dashboard_content(month_value)
-
-
-# =========================================================
-# DMB FUNCTION-CARD CALLBACK
-# =========================================================
-
-@app.callback(
-    Output("function-cards-container", "children"),
     Input("dmb-month-filter", "value"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,
 )
-def update_dmb_function_cards(month_value, sync_data):
-    return get_dmb_function_cards_content(month_value)
+def update_mpr_dashboard(header_val, mpr_val, dmb_val, sync_data):
+    month_value = header_val or mpr_val or dmb_val
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            trig = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trig == "mpr-month-filter" and mpr_val:
+                month_value = mpr_val
+            elif trig == "dmb-month-filter" and dmb_val:
+                month_value = dmb_val
+            elif header_val:
+                month_value = header_val
+    except Exception:
+        pass
+    return get_mpr_dashboard_content(month_value)
 
+
+# =========================================================
+# DMB FUNCTION-CARD CALLBACK (Function-wise Performance)
+# =========================================================
 
 @app.callback(
-    Output("rca-table-container", "children"),
-    Output("rca-reporting-month", "children"),
+    Output("function-cards-container", "children"),
+    Input("header-month-filter", "value"),
+    Input("dmb-month-filter", "value"),
     Input("mpr-month-filter", "value"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,
 )
-def update_rca_table(month_value, sync_data):
+def update_dmb_function_cards(header_val, dmb_val, mpr_val, sync_data):
+    month_value = header_val or dmb_val or mpr_val
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            trig = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trig == "dmb-month-filter" and dmb_val:
+                month_value = dmb_val
+            elif trig == "mpr-month-filter" and mpr_val:
+                month_value = mpr_val
+            elif header_val:
+                month_value = header_val
+    except Exception:
+        pass
+    return get_dmb_function_cards_content(month_value)
+
+
+# =========================================================
+# RCA CALLBACK (MoS Level Cause & Actions)
+# =========================================================
+
+@app.callback(
+    Output("rca-table-container", "children"),
+    Output("rca-reporting-month", "children"),
+    Input("header-month-filter", "value"),
+    Input("mpr-month-filter", "value"),
+    Input("dmb-month-filter", "value"),
+    Input("live-sync-state-store", "data"),
+    prevent_initial_call=True,
+)
+def update_rca_table(header_val, mpr_val, dmb_val, sync_data):
+    month_value = header_val or mpr_val or dmb_val
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            trig = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trig == "mpr-month-filter" and mpr_val:
+                month_value = mpr_val
+            elif trig == "dmb-month-filter" and dmb_val:
+                month_value = dmb_val
+            elif header_val:
+                month_value = header_val
+    except Exception:
+        pass
     return get_rca_table_content(month_value)
 
 
