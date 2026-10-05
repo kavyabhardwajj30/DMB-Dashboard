@@ -203,10 +203,14 @@
 
 .rca-cause-text {
     color: #243b4f;
+    white-space: pre-line;
+    line-height: 1.5;
 }
 
 .rca-action-text {
     color: #1e3a52;
+    white-space: pre-line;
+    line-height: 1.5;
 }
 
 .rca-missing-text {

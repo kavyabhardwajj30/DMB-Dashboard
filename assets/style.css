@@ -66,12 +66,12 @@ textarea {
    ========================================================= */
 
 .top-navigation {
-    display: grid !important;
-    grid-template-columns: minmax(300px, 1fr) auto minmax(300px, 1fr);
+    display: flex !important;
     align-items: center !important;
-    gap: 28px;
-    min-height: 104px;
-    padding: 18px 26px;
+    justify-content: space-between !important;
+    gap: 20px;
+    min-height: 80px;
+    padding: 16px 26px;
     background: linear-gradient(110deg, #06456f 0%, #075a86 100%);
     color: #ffffff;
 }
@@ -106,11 +106,18 @@ textarea {
     margin: 0;
     overflow: hidden;
     color: #ffffff !important;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 750;
-    line-height: 1.2;
+    line-height: 1.25;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.header-reporting-month {
+    color: #c7e5f8;
+    font-weight: 600;
+    font-size: 24px;
+    margin-left: 4px;
 }
 
 .brand-text p {
@@ -200,7 +207,7 @@ textarea {
     gap: 18px;
     min-height: 54px;
     padding: 12px 18px;
-    background: #d33c55;
+    background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
     color: #ffffff;
 }
 
@@ -651,11 +658,7 @@ textarea {
 
 @media screen and (max-width: 1250px) {
     .top-navigation {
-        grid-template-columns: minmax(280px, 1fr) auto auto;
-    }
-
-    .navigation-tab {
-        min-width: 105px;
+        padding: 14px 20px;
     }
 
     .mpr-visual-grid {
@@ -675,13 +678,8 @@ textarea {
     }
 
     .top-navigation {
-        grid-template-columns: 1fr auto;
-        gap: 16px;
-    }
-
-    .navigation-tabs {
-        grid-column: 1 / -1;
-        grid-row: 2;
+        padding: 14px 18px;
+        gap: 14px;
     }
 
     .download-button {
@@ -708,24 +706,15 @@ textarea {
 
 @media screen and (max-width: 760px) {
     .top-navigation {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
         padding: 16px;
     }
 
     .brand-text h1 {
         font-size: 24px;
         white-space: normal;
-    }
-
-    .navigation-tabs {
-        grid-column: auto;
-        grid-row: auto;
-        width: 100%;
-    }
-
-    .navigation-tab {
-        flex: 1 1 50%;
-        min-width: 0;
     }
 
     .download-button {

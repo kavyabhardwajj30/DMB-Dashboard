@@ -1272,23 +1272,27 @@ def section_header(
     if subtitle:
         title_children.append(html.P(subtitle))
 
+    control_children = []
+    if filter_label:
+        control_children.append(html.Label(filter_label))
+    control_children.append(
+        dcc.Dropdown(
+            id=filter_id,
+            options=filter_options,
+            value=default_value,
+            clearable=False,
+            searchable=False,
+            optionHeight=40,
+            maxHeight=280,
+            className="section-month-dropdown",
+        )
+    )
+
     return html.Div(
         [
             html.Div(title_children),
             html.Div(
-                [
-                    html.Label(filter_label),
-                    dcc.Dropdown(
-                        id=filter_id,
-                        options=filter_options,
-                        value=default_value,
-                        clearable=False,
-                        searchable=False,
-                        optionHeight=40,
-                        maxHeight=280,
-                        className="section-month-dropdown",
-                    ),
-                ],
+                control_children,
                 className="section-month-control",
             ),
         ],
@@ -2102,8 +2106,8 @@ def create_rca_table(selected_month):
         c_val = str(r.get("cause", "")).strip()
         a_val = str(r.get("action", "")).strip()
 
-        c_clean = "" if (not c_val or c_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else c_val
-        a_clean = "" if (not a_val or a_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else a_val
+        c_clean = "" if (not c_val or c_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else data_loader.get_crisp_rca_text(k_name, c_val, "cause")
+        a_clean = "" if (not a_val or a_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else data_loader.get_crisp_rca_text(k_name, a_val, "action")
 
         if c_clean and k_name not in strategic_cause_map:
             strategic_cause_map[k_name] = c_clean
@@ -2117,8 +2121,11 @@ def create_rca_table(selected_month):
         curr_c = str(row.get("cause", "")).strip()
         curr_a = str(row.get("action", "")).strip()
 
-        cause_val = curr_c if (curr_c and curr_c.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else strategic_cause_map.get(kpi_name_val, "")
-        action_val = curr_a if (curr_a and curr_a.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else strategic_action_map.get(kpi_name_val, "")
+        raw_c = curr_c if (curr_c and curr_c.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else strategic_cause_map.get(kpi_name_val, "")
+        raw_a = curr_a if (curr_a and curr_a.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else strategic_action_map.get(kpi_name_val, "")
+
+        cause_val = data_loader.get_crisp_rca_text(kpi_name_val, raw_c, "cause")
+        action_val = data_loader.get_crisp_rca_text(kpi_name_val, raw_a, "action")
 
         is_cause_missing = (
             not cause_val
@@ -3257,6 +3264,7 @@ def get_mpr_dashboard_content(month_value):
             "No continuous-red KPI identified.",
         ),
         len(concern_text),
+        f" — {selected_month.strftime('%B %Y')}",
     )
 
 
@@ -3353,35 +3361,18 @@ def serve_layout():
                 [
                     html.Div(
                         [
-                            html.Div("D", className="brand-logo"),
-                            html.Div(
+                            html.H1(
                                 [
-                                    html.H1("DMB Performance Dashboard"),
-                                    html.P("Executive KPI view · 2026"),
-                                ],
-                                className="brand-text",
+                                    "DMB Performance Review AOP Critical Dashboard",
+                                    html.Span(
+                                        mpr_init[16],
+                                        id="header-reporting-month",
+                                        className="header-reporting-month",
+                                    ),
+                                ]
                             ),
                         ],
-                        className="brand-section",
-                    ),
-                    html.Nav(
-                        [
-                            html.A(
-                                "MPR",
-                                href="#mpr-section",
-                                id="nav-tab-mpr",
-                                className=(
-                                    "navigation-tab navigation-tab-active"
-                                ),
-                            ),
-                            html.A(
-                                "DMB",
-                                href="#dmb-section",
-                                id="nav-tab-dmb",
-                                className="navigation-tab",
-                            ),
-                        ],
-                        className="navigation-tabs",
+                        className="brand-text",
                     ),
                     html.Button(
                         "Download 1 Pager",
@@ -3404,9 +3395,8 @@ def serve_layout():
                                 "Highlights & Lowlights of KPIs at MoS Level"
                             ),
                             html.Span(
-                                mpr_init[9],
                                 id="insights-reporting-month",
-                                className="insights-month",
+                                style={"display": "none"},
                             ),
                         ],
                         className="insights-title-bar",
@@ -3448,9 +3438,9 @@ def serve_layout():
                 [
                     section_header(
                         "mpr-section",
-                        "MPR — Overall MoS KPI Performance",
-                        "Critical KPI performance by strategic imperative",
-                        "MPR month",
+                        "Overall MoS KPI Performance",
+                        None,
+                        None,
                         "mpr-month-filter",
                         create_month_options(curr_mpr_months),
                         default_value=mpr_str,
@@ -3576,7 +3566,7 @@ def serve_layout():
                         "dmb-section",
                         "DMB — Function-wise KPI Performance",
                         None,
-                        "DMB month",
+                        None,
                         "dmb-month-filter",
                         create_month_options(curr_dmb_months),
                         default_value=dmb_str,
@@ -3766,6 +3756,7 @@ def refresh_month_dropdown_options(sync_data):
     Output("lowlights-count", "children"),
     Output("concerns-content", "children"),
     Output("concerns-count", "children"),
+    Output("header-reporting-month", "children"),
     Input("mpr-month-filter", "value"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,

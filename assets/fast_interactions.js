@@ -2,9 +2,8 @@
  * Fast Client-Side Interactions for DMB Performance Dashboard
  * ==========================================================
  * Provides instant 0ms UI responsiveness:
- * 1. Instant Tab Switching (MPR vs DMB) with smooth scroll & scroll-spy
- * 2. Instant Modal Dismissal (Close button, Backdrop click, Escape key)
- * 3. Instant Visual Feedback on clickables
+ * 1. Instant Modal Dismissal (Close button, Backdrop click, Escape key)
+ * 2. Instant Visual Feedback on clickables
  */
 
 (function () {
@@ -12,16 +11,12 @@
 
     function initInteractions() {
         // ----------------------------------------------------
-        // 1. Navigation Tabs (MPR vs DMB)
+        // 1. Navigation Tabs (if present)
         // ----------------------------------------------------
         var tabMpr = document.getElementById('nav-tab-mpr');
         var tabDmb = document.getElementById('nav-tab-dmb');
 
         function setActiveTab(activeName) {
-            if (!tabMpr || !tabDmb) {
-                tabMpr = document.getElementById('nav-tab-mpr');
-                tabDmb = document.getElementById('nav-tab-dmb');
-            }
             if (activeName === 'mpr') {
                 if (tabMpr) tabMpr.classList.add('navigation-tab-active');
                 if (tabDmb) tabDmb.classList.remove('navigation-tab-active');
@@ -31,7 +26,8 @@
             }
         }
 
-        if (tabMpr) {
+        if (tabMpr && !tabMpr.hasAttribute('data-bound')) {
+            tabMpr.setAttribute('data-bound', 'true');
             tabMpr.addEventListener('click', function (e) {
                 e.preventDefault();
                 setActiveTab('mpr');
@@ -44,7 +40,8 @@
             });
         }
 
-        if (tabDmb) {
+        if (tabDmb && !tabDmb.hasAttribute('data-bound')) {
+            tabDmb.setAttribute('data-bound', 'true');
             tabDmb.addEventListener('click', function (e) {
                 e.preventDefault();
                 setActiveTab('dmb');
@@ -53,21 +50,6 @@
                     dmbTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             });
-        }
-
-        // Scroll spy to automatically highlight MPR vs DMB as user scrolls
-        var dmbSection = document.getElementById('dmb-section');
-        if (dmbSection && 'IntersectionObserver' in window) {
-            var observer = new IntersectionObserver(function (entries) {
-                entries.forEach(function (entry) {
-                    if (entry.isIntersecting && entry.boundingClientRect.top <= window.innerHeight * 0.4) {
-                        setActiveTab('dmb');
-                    } else if (window.scrollY < (dmbSection.offsetTop - 200)) {
-                        setActiveTab('mpr');
-                    }
-                });
-            }, { threshold: [0.1, 0.3, 0.5] });
-            observer.observe(dmbSection);
         }
 
         // ----------------------------------------------------
@@ -83,18 +65,23 @@
         var closeBtn = document.getElementById('close-continuous-red-modal');
         var backdrop = document.getElementById('continuous-red-modal-backdrop');
 
-        if (closeBtn) {
+        if (closeBtn && !closeBtn.hasAttribute('data-bound')) {
+            closeBtn.setAttribute('data-bound', 'true');
             closeBtn.addEventListener('click', closeModalInstantly);
         }
-        if (backdrop) {
+        if (backdrop && !backdrop.hasAttribute('data-bound')) {
+            backdrop.setAttribute('data-bound', 'true');
             backdrop.addEventListener('click', closeModalInstantly);
         }
 
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' || e.keyCode === 27) {
-                closeModalInstantly();
-            }
-        });
+        if (!window.__modalEscapeBound) {
+            window.__modalEscapeBound = true;
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' || e.keyCode === 27) {
+                    closeModalInstantly();
+                }
+            });
+        }
     }
 
     if (document.readyState === 'loading') {
@@ -105,11 +92,8 @@
 
     // Re-bind after Dash reloads components
     var observer = new MutationObserver(function () {
-        var tabMpr = document.getElementById('nav-tab-mpr');
-        if (tabMpr && !tabMpr.hasAttribute('data-bound')) {
-            tabMpr.setAttribute('data-bound', 'true');
-            initInteractions();
-        }
+        initInteractions();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 })();
+
