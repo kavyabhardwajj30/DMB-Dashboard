@@ -3363,7 +3363,7 @@ def serve_layout():
                         [
                             html.H1(
                                 [
-                                    "DMB Performance Review AOP Critical Dashboard",
+                                    "MoS DMB Performance Review - AOP Critical",
                                     html.Span(
                                         mpr_init[16],
                                         id="header-reporting-month",
@@ -3395,8 +3395,9 @@ def serve_layout():
                                 "Highlights & Lowlights of KPIs at MoS Level"
                             ),
                             html.Span(
+                                mpr_init[9],
                                 id="insights-reporting-month",
-                                style={"display": "none"},
+                                className="insights-month",
                             ),
                         ],
                         className="insights-title-bar",
