@@ -77,8 +77,8 @@
     margin: 0;
     overflow: hidden;
     color: #000000;
-    font-size: 17px;
-    font-weight: 700;
+    font-size: 18.5px;
+    font-weight: 750;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -120,7 +120,7 @@
     margin: 0;
     padding: 12px 14px 8px;
     color: #000000;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 650;
     letter-spacing: 0.01em;
 }
@@ -189,14 +189,14 @@
 
 .function-stat strong {
     color: #000000;
-    font-size: 20px;
+    font-size: 21px;
     line-height: 1;
 }
 
 .function-stat span {
     margin-top: 5px;
     color: #000000;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -229,7 +229,7 @@
     color: #0877b9;
     cursor: pointer;
     font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     transition: background 0.2s ease, color 0.2s ease;
 }
@@ -260,14 +260,14 @@
     gap: 7px;
     padding: 0 2px;
     color: #000000;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
 }
 
 .mini-target-label {
     flex-shrink: 0;
     color: #000000;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 650;
 }
 
@@ -299,13 +299,13 @@
 .continuous-red-panel p {
     margin: 9px 0 3px;
     color: #000000;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
 }
 
 .continuous-red-panel small {
     color: #000000;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 550;
     line-height: 1.3;
 }

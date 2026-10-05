@@ -202,20 +202,20 @@ textarea {
 
 .executive-insights-section {
     overflow: hidden;
-    margin: 22px 0 28px;
+    margin: 16px 0 22px;
     border: 1px solid #d5e1e9;
-    border-radius: 14px;
+    border-radius: 12px;
     background: #ffffff;
-    box-shadow: 0 8px 24px rgba(23, 63, 91, 0.09);
+    box-shadow: 0 6px 20px rgba(23, 63, 91, 0.08);
 }
 
 .insights-title-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
-    min-height: 60px;
-    padding: 14px 22px;
+    gap: 16px;
+    min-height: 46px;
+    padding: 9px 18px;
     background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
     color: #ffffff;
 }
@@ -223,7 +223,7 @@ textarea {
 .insights-title-bar h2 {
     margin: 0;
     color: #ffffff;
-    font-size: 26px;
+    font-size: 17px;
     font-weight: 750;
     line-height: 1.25;
 }
@@ -231,55 +231,55 @@ textarea {
 .insights-month {
     flex-shrink: 0;
     color: #ffffff;
-    font-size: 16.5px;
+    font-size: 12px;
     font-weight: 600;
 }
 
 .executive-insights {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 20px;
-    padding: 22px;
+    gap: 14px;
+    padding: 14px 18px;
 }
 
 .insight-card {
     min-width: 0;
-    min-height: 230px;
-    max-height: 440px;
-    overflow-y: auto;
-    padding: 24px 28px;
+    min-height: 120px;
+    height: auto;
+    overflow: visible;
+    padding: 12px 14px;
     border: 1px solid var(--card-border);
-    border-radius: 14px;
+    border-radius: 10px;
     background: var(--card-background) !important;
-    box-shadow: 0 6px 17px rgba(23, 63, 91, 0.07);
+    box-shadow: 0 4px 14px rgba(23, 63, 91, 0.06);
 }
 
 .highlight-card {
-    border-top: 5px solid var(--green);
+    border-top: 4px solid var(--green);
 }
 
 .lowlight-card {
-    border-top: 5px solid var(--amber);
+    border-top: 4px solid var(--amber);
 }
 
 .concern-card {
-    border-top: 5px solid var(--red);
+    border-top: 4px solid var(--red);
 }
 
 .insight-title-row {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 14px;
-    padding-bottom: 14px;
+    gap: 10px;
+    padding-bottom: 7px;
     border-bottom: 1px solid #e5edf2;
 }
 
 .insight-title-row h3 {
     margin: 0;
     color: var(--text-dark) !important;
-    font-size: 26px;
-    font-weight: 800;
+    font-size: 14.5px;
+    font-weight: 750;
 }
 
 .highlight-card .insight-title-row h3 {
@@ -298,34 +298,38 @@ textarea {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 42px;
-    min-width: 42px;
-    height: 42px;
-    padding: 0 8px;
-    border-radius: 21px;
+    flex: 0 0 22px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 3px;
+    border-radius: 11px;
     background: #edf3f7;
     color: #000000;
-    font-size: 20px;
-    font-weight: 800;
+    font-size: 11px;
+    font-weight: 750;
 }
 
 .insight-list {
-    margin: 16px 0 0;
-    padding-left: 28px;
+    margin: 8px 0 0;
+    padding-left: 16px;
     color: #000000 !important;
-    font-size: 25px;
-    line-height: 1.65;
+    font-size: 11.5px;
+    line-height: 1.4;
 }
 
 .insight-list li {
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     color: #000000 !important;
 }
 
+.insight-list li:last-child {
+    margin-bottom: 0;
+}
+
 .empty-message {
-    margin: 16px 0 0;
+    margin: 8px 0 0;
     color: #000000 !important;
-    font-size: 24px;
+    font-size: 11.5px;
 }
 
 /* =========================================================
@@ -346,8 +350,8 @@ textarea {
     align-items: center !important;
     justify-content: space-between !important;
     gap: 24px;
-    min-height: 70px;
-    padding: 13px 16px;
+    min-height: 72px;
+    padding: 14px 18px;
     scroll-margin-top: 16px;
     background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
     color: #ffffff;
@@ -356,7 +360,7 @@ textarea {
 .section-header h2 {
     margin: 0;
     color: #ffffff !important;
-    font-size: 21px;
+    font-size: 23px;
     font-weight: 750;
     line-height: 1.25;
 }
@@ -364,7 +368,7 @@ textarea {
 .section-header p {
     margin: 4px 0 0;
     color: #d6eaf5 !important;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .section-month-control {
@@ -378,7 +382,7 @@ textarea {
 .section-month-control label {
     flex-shrink: 0;
     color: #ffffff !important;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 650;
 }
 
@@ -543,7 +547,7 @@ textarea {
 
 .kpi-summary-card {
     min-width: 0;
-    min-height: 108px;
+    min-height: 110px;
     padding: 16px 16px;
     border: 1px solid #e1e9ef;
     border-radius: 10px;
@@ -554,8 +558,8 @@ textarea {
     margin: 0;
     overflow: hidden;
     color: #000000 !important;
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 750;
     text-overflow: ellipsis;
     white-space: nowrap;
     letter-spacing: 0.01em;
@@ -569,15 +573,15 @@ textarea {
 }
 
 .kpi-card-value {
-    font-size: 36px;
+    font-size: 38px;
     font-weight: 800;
     line-height: 1;
 }
 
 .kpi-card-secondary {
     color: #000000;
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 650;
 }
 
 /* =========================================================
@@ -614,14 +618,14 @@ textarea {
 .chart-title-row h3 {
     margin: 0;
     color: #000000 !important;
-    font-size: 15px;
+    font-size: 16.5px;
     font-weight: 750;
 }
 
 .chart-note {
     flex-shrink: 0;
     color: #000000 !important;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .gauge-chart-card #mpr-gauge,
