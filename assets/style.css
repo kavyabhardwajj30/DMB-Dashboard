@@ -6,9 +6,9 @@
     --red: #dc3d56;
     --amber: #c18100;
     --purple: #8b5cf6;
-    --text-dark: #082d4c;
-    --text-medium: #496780;
-    --text-muted: #6e879b;
+    --text-dark: #000000;
+    --text-medium: #000000;
+    --text-muted: #000000;
     --page-background: #edf4f8;
     --card-background: #ffffff;
     --card-border: #d5e1e9;
@@ -304,7 +304,7 @@ textarea {
     padding: 0 7px;
     border-radius: 14px;
     background: #edf3f7;
-    color: var(--text-medium);
+    color: #000000;
     font-size: 12px;
     font-weight: 750;
 }
@@ -312,18 +312,19 @@ textarea {
 .insight-list {
     margin: 11px 0 0;
     padding-left: 18px;
-    color: var(--text-medium) !important;
+    color: #000000 !important;
     font-size: 13px;
     line-height: 1.5;
 }
 
 .insight-list li {
     margin-bottom: 5px;
+    color: #000000 !important;
 }
 
 .empty-message {
     margin: 14px 0 0;
-    color: #8298a9 !important;
+    color: #000000 !important;
     font-size: 13px;
 }
 
@@ -552,9 +553,9 @@ textarea {
 .kpi-card-label {
     margin: 0;
     overflow: hidden;
-    color: var(--text-muted) !important;
+    color: #000000 !important;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -573,7 +574,7 @@ textarea {
 }
 
 .kpi-card-secondary {
-    color: var(--text-medium);
+    color: #000000;
     font-size: 13px;
 }
 
@@ -610,14 +611,14 @@ textarea {
 
 .chart-title-row h3 {
     margin: 0;
-    color: var(--text-dark) !important;
+    color: #000000 !important;
     font-size: 15px;
     font-weight: 750;
 }
 
 .chart-note {
     flex-shrink: 0;
-    color: var(--text-muted) !important;
+    color: #000000 !important;
     font-size: 11px;
 }
 

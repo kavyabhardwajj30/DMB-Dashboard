@@ -31,7 +31,7 @@
 
 .rca-section-heading {
     margin: 0;
-    color: #082d4c;
+    color: #000000;
     font-size: 22px;
     font-weight: 750;
     line-height: 1.25;
@@ -39,9 +39,9 @@
 
 .rca-section-subheading {
     margin: 0;
-    color: #496780;
+    color: #000000;
     font-size: 13.5px;
-    font-weight: 500;
+    font-weight: 550;
 }
 
 .rca-filter-box {
@@ -54,7 +54,7 @@
 .rca-filter-label {
     font-size: 13px;
     font-weight: 650;
-    color: #082d4c;
+    color: #000000;
     white-space: nowrap;
 }
 
@@ -135,7 +135,7 @@
     min-width: 980px;
     border-collapse: collapse;
     table-layout: fixed;
-    color: #082d4c;
+    color: #000000;
     font-size: 14.5px;
 }
 
@@ -193,22 +193,22 @@
 
 .rca-imperative-name {
     font-weight: 650;
-    color: #0c3e60;
+    color: #000000;
 }
 
 .rca-kpi-name {
     font-weight: 700;
-    color: #082d4c;
+    color: #000000;
 }
 
 .rca-cause-text {
-    color: #243b4f;
+    color: #000000;
     white-space: pre-line;
     line-height: 1.5;
 }
 
 .rca-action-text {
-    color: #1e3a52;
+    color: #000000;
     white-space: pre-line;
     line-height: 1.5;
 }
@@ -221,7 +221,7 @@
 
 .rca-empty-message {
     padding: 36px 18px;
-    color: #6e879b;
+    color: #000000;
     font-size: 14px;
     text-align: center;
     font-style: italic;
@@ -384,7 +384,7 @@
 
 .rca-subhead-cell {
     background: #ebf3f9 !important;
-    color: #082d4c !important;
+    color: #000000 !important;
     font-size: 13.5px !important;
     font-weight: 750 !important;
     padding: 10px 14px !important;
@@ -444,16 +444,16 @@
 }
 
 .rca-recovery-cell.rca-cause-text {
-    color: #0f2b48;
+    color: #000000;
     font-size: 13.5px;
     font-weight: 600;
     text-align: left;
 }
 
 .rca-recovery-cell.rca-root-cause-text {
-    color: #334155;
+    color: #000000;
     font-size: 13px;
-    font-weight: 550;
+    font-weight: 600;
     text-align: left;
     line-height: 1.4;
 }
@@ -478,7 +478,7 @@
 
 .rca-action-main-text {
     display: block;
-    color: #082d4c;
+    color: #000000;
     font-size: 13.5px;
     font-weight: 600;
     line-height: 1.45;
@@ -494,14 +494,14 @@
 
 .rca-action-subnote {
     display: block;
-    color: #64748b;
+    color: #000000;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 550;
     font-style: normal;
 }
 
 .rca-owner-text {
-    color: #082d4c;
+    color: #000000;
     font-size: 13px;
     font-weight: 600;
 }
@@ -527,7 +527,7 @@
     max-width: 200px !important;
     box-sizing: border-box !important;
     background: #f8fbfe !important;
-    color: #082d4c !important;
+    color: #000000 !important;
     font-weight: 750 !important;
     font-size: 14px !important;
     text-align: center !important;
@@ -542,7 +542,7 @@
     font-size: 13.5px;
     line-height: 1.45;
     font-weight: 550;
-    color: #0f2b48;
+    color: #000000;
 }
 
 .action-cell-cause {
@@ -550,7 +550,7 @@
     text-align: left !important;
     font-size: 13px;
     line-height: 1.4;
-    color: #475569;
+    color: #000000;
 }
 
 .action-cell-owner {
@@ -558,7 +558,7 @@
     text-align: center !important;
     font-size: 13px;
     font-weight: 600;
-    color: #1e293b;
+    color: #000000;
 }
 
 .action-cell-status {
@@ -631,12 +631,12 @@
     border-radius: 10px;
     background: #ffffff;
     text-align: center;
-    color: #6c8496;
+    color: #000000;
 }
 
 .rca-empty-notice h4 {
     margin: 0 0 6px;
-    color: #093758;
+    color: #000000;
     font-size: 16px;
 }
 
