@@ -1325,9 +1325,9 @@ def create_gauge(value):
                     "tickfont": {
                         "family": "Segoe UI",
                         "size": 12,
-                        "color": "#496780",
+                        "color": "#000000",
                     },
-                    "tickcolor": "#496780",
+                    "tickcolor": "#000000",
                     "tickwidth": 1,
                     "ticklen": 4,
                 },
@@ -1363,7 +1363,7 @@ def create_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 36,
-            "color": "#082d4c",
+            "color": "#000000",
         },
     )
 
@@ -1375,7 +1375,7 @@ def create_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 13,
-            "color": "#496780",
+            "color": "#000000",
         },
     )
 
@@ -1418,9 +1418,9 @@ def create_mini_gauge(value):
                     "tickfont": {
                         "family": "Segoe UI",
                         "size": 9,
-                        "color": "#496780",
+                        "color": "#000000",
                     },
-                    "tickcolor": "#496780",
+                    "tickcolor": "#000000",
                     "tickwidth": 1,
                     "ticklen": 3,
                 },
@@ -1451,7 +1451,7 @@ def create_mini_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 27,
-            "color": "#082d4c",
+            "color": "#000000",
         },
     )
 
@@ -1463,7 +1463,7 @@ def create_mini_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 11,
-            "color": "#6e879b",
+            "color": "#000000",
         },
     )
 
@@ -2306,7 +2306,7 @@ def create_pareto_chart(causes):
         },
         xaxis={
             "title": "Causes ranked by impact",
-            "tickfont": {"size": 10, "color": "#294a63"},
+            "tickfont": {"size": 10, "color": "#000000"},
             "showgrid": False,
             "automargin": True,
         },
@@ -2317,7 +2317,7 @@ def create_pareto_chart(causes):
             "dtick": 20,
             "gridcolor": "#dfe8ee",
             "zeroline": False,
-            "tickfont": {"size": 9, "color": "#496780"},
+            "tickfont": {"size": 9, "color": "#000000"},
         },
         yaxis2={
             "title": {
@@ -2362,7 +2362,7 @@ def create_pareto_chart(causes):
                 "font": {"size": 8, "color": "#a66b00"},
             }
         ],
-        font={"family": "Segoe UI", "color": "#294a63"},
+        font={"family": "Segoe UI", "color": "#000000"},
     )
 
     return figure
@@ -3009,7 +3009,7 @@ def create_imperative_chart(current_data):
             },
             text=summary["percentage"].map(lambda value: f"{value:.1f}%"),
             textposition="outside",
-            textfont={"size": 12, "color": "#082d4c"},
+            textfont={"size": 12, "color": "#000000"},
             cliponaxis=False,
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
@@ -3043,7 +3043,7 @@ def create_imperative_chart(current_data):
             "showgrid": False,
             "zeroline": False,
             "fixedrange": True,
-            "tickfont": {"size": 10, "color": "#496780"},
+            "tickfont": {"size": 10, "color": "#000000"},
             "automargin": True,
         },
         yaxis={
@@ -3055,9 +3055,9 @@ def create_imperative_chart(current_data):
             "gridwidth": 1,
             "zeroline": False,
             "fixedrange": True,
-            "tickfont": {"size": 10, "color": "#6e879b"},
+            "tickfont": {"size": 10, "color": "#000000"},
         },
-        font={"family": "Segoe UI", "color": "#496780"},
+        font={"family": "Segoe UI", "color": "#000000"},
     )
 
     return figure
@@ -3173,12 +3173,13 @@ def create_trend_chart(selected_month):
             "orientation": "h",
             "x": 0.62,
             "y": 1.18,
-            "font": {"size": 12},
+            "font": {"size": 12, "color": "#000000"},
         },
         xaxis={
             "tickformat": "%b",
             "gridcolor": "#dce6ed",
             "zeroline": False,
+            "tickfont": {"color": "#000000"},
         },
         yaxis={
             "range": [0, 105],
@@ -3186,11 +3187,12 @@ def create_trend_chart(selected_month):
             "gridcolor": "#dce6ed",
             "zeroline": False,
             "dtick": 25,
+            "tickfont": {"color": "#000000"},
         },
         font={
             "family": "Segoe UI",
             "size": 12,
-            "color": "#496780",
+            "color": "#000000",
         },
     )
 
