@@ -118,10 +118,11 @@
 
 .function-card-subtitle {
     margin: 0;
-    padding: 11px 14px 8px;
+    padding: 12px 14px 8px;
     color: #000000;
-    font-size: 12px;
-    font-weight: 550;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
 }
 
 .function-stacked-bar {
