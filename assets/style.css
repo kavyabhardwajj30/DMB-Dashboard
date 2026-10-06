@@ -214,16 +214,16 @@ textarea {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 46px;
-    padding: 9px 18px;
+    min-height: 72px;
+    padding: 14px 18px;
     background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
     color: #ffffff;
 }
 
 .insights-title-bar h2 {
     margin: 0;
-    color: #ffffff;
-    font-size: 17px;
+    color: #ffffff !important;
+    font-size: 23px;
     font-weight: 750;
     line-height: 1.25;
 }
@@ -231,7 +231,7 @@ textarea {
 .insights-month {
     flex-shrink: 0;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
 }
 
@@ -244,10 +244,10 @@ textarea {
 
 .insight-card {
     min-width: 0;
-    min-height: 120px;
+    min-height: 130px;
     height: auto;
     overflow: visible;
-    padding: 12px 14px;
+    padding: 14px 16px;
     border: 1px solid var(--card-border);
     border-radius: 10px;
     background: var(--card-background) !important;
@@ -271,14 +271,14 @@ textarea {
     align-items: center !important;
     justify-content: space-between !important;
     gap: 10px;
-    padding-bottom: 7px;
+    padding-bottom: 8px;
     border-bottom: 1px solid #e5edf2;
 }
 
 .insight-title-row h3 {
     margin: 0;
     color: var(--text-dark) !important;
-    font-size: 14.5px;
+    font-size: 20px;
     font-weight: 750;
 }
 
@@ -298,27 +298,27 @@ textarea {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 22px;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 3px;
-    border-radius: 11px;
+    flex: 0 0 26px;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 4px;
+    border-radius: 13px;
     background: #edf3f7;
     color: #000000;
-    font-size: 11px;
-    font-weight: 750;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .insight-list {
-    margin: 8px 0 0;
-    padding-left: 16px;
+    margin: 10px 0 0;
+    padding-left: 20px;
     color: #000000 !important;
-    font-size: 11.5px;
-    line-height: 1.4;
+    font-size: 15px;
+    line-height: 1.5;
 }
 
 .insight-list li {
-    margin-bottom: 5px;
+    margin-bottom: 6px;
     color: #000000 !important;
 }
 
@@ -327,9 +327,9 @@ textarea {
 }
 
 .empty-message {
-    margin: 8px 0 0;
+    margin: 10px 0 0;
     color: #000000 !important;
-    font-size: 11.5px;
+    font-size: 15px;
 }
 
 /* =========================================================
@@ -558,7 +558,7 @@ textarea {
     margin: 0;
     overflow: hidden;
     color: #000000 !important;
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 750;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -569,19 +569,19 @@ textarea {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    margin-top: 14px;
+    margin-top: 10px;
 }
 
 .kpi-card-value {
-    font-size: 38px;
-    font-weight: 800;
+    font-size: 34px;
+    font-weight: 500;
     line-height: 1;
 }
 
 .kpi-card-secondary {
     color: #000000;
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 500;
 }
 
 /* =========================================================

@@ -3674,11 +3674,14 @@ def serve_layout():
                                         ]
                                     ),
                                     html.Button(
-                                        "×",
+                                        [
+                                            html.Span("←", className="modal-back-arrow"),
+                                            html.Span("Back", className="modal-back-text"),
+                                        ],
                                         id="close-continuous-red-modal",
                                         n_clicks=0,
                                         className="continuous-red-modal-close",
-                                        title="Close details",
+                                        title="Back to Dashboard",
                                     ),
                                 ],
                                 className="continuous-red-modal-header",
