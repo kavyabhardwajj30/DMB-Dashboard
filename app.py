@@ -1304,8 +1304,21 @@ def section_header(
 
 
 # =========================================================
-# GAUGE CHART
+# GAUGE CHART & FORMATTING
 # =========================================================
+
+def format_percentage(val):
+    if val is None or pd.isna(val):
+        return "—"
+    try:
+        val_float = float(val)
+        rounded = round(val_float, 1)
+        if rounded == 100 or rounded == int(rounded):
+            return f"{int(rounded)}%"
+        return f"{rounded:.1f}%"
+    except (ValueError, TypeError):
+        return str(val)
+
 
 def create_gauge(value):
     gauge_color = "#168b69" if value >= GAUGE_TARGET else "#dc3d56"
@@ -1358,7 +1371,7 @@ def create_gauge(value):
     figure.add_annotation(
         x=0.5,
         y=0.38,
-        text=f"<b>{value:.1f}%</b>",
+        text=f"<b>{format_percentage(value)}</b>",
         showarrow=False,
         font={
             "family": "Segoe UI",
@@ -1442,7 +1455,7 @@ def create_mini_gauge(value):
         )
     )
 
-    display_text = "<b>—</b>" if is_no_data else f"<b>{value:.1f}%</b>"
+    display_text = "<b>—</b>" if is_no_data else f"<b>{format_percentage(value)}</b>"
     figure.add_annotation(
         x=0.5,
         y=0.34,
@@ -3007,7 +3020,7 @@ def create_imperative_chart(current_data):
                 ],
                 "line": {"color": "#ffffff", "width": 1},
             },
-            text=summary["percentage"].map(lambda value: f"{value:.1f}%"),
+            text=summary["percentage"].map(format_percentage),
             textposition="outside",
             textfont={"size": 12, "color": "#000000"},
             cliponaxis=False,
@@ -3146,7 +3159,7 @@ def create_trend_chart(selected_month):
         figure.add_annotation(
             x=selected_month,
             y=selected_result["met_percentage"],
-            text=f"<b>{selected_result['met_percentage']:.1f}%</b>",
+            text=f"<b>{format_percentage(selected_result['met_percentage'])}</b>",
             showarrow=False,
             xshift=30,
             yshift=10,
@@ -3156,7 +3169,7 @@ def create_trend_chart(selected_month):
         figure.add_annotation(
             x=selected_month,
             y=selected_result["improved_percentage"],
-            text=f"<b>{selected_result['improved_percentage']:.1f}%</b>",
+            text=f"<b>{format_percentage(selected_result['improved_percentage'])}</b>",
             showarrow=False,
             xshift=30,
             yshift=-12,
