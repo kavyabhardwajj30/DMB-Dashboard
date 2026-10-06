@@ -20,16 +20,18 @@
       "*Master*.xlsx"
     ],
     "functional_review": [
+      "*Functional*Review*.xlsx",
+      "*Functional*DMB*.xlsx",
+      "*Functional*.xlsx",
       "*17th*sept*.xlsx",
-      "*17Th*sept*.xlsx",
-      "*Functional DMB Review Sheets-17th_sept*.xlsx"
+      "*17Th*sept*.xlsx"
     ],
     "strategic_execution": [
-      "*Strategic*17Th*sept*.xlsx",
-      "*Strategic*17th*sept*.xlsx",
       "*Strategic*Execution*.xlsx",
       "*Strategic*.xlsx",
-      "*AOP*Critical*.xlsx"
+      "*AOP*Critical*.xlsx",
+      "*Strategic*17Th*sept*.xlsx",
+      "*Strategic*17th*sept*.xlsx"
     ]
   }
 }

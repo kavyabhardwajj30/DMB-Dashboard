@@ -5,8 +5,9 @@
     flex-wrap: wrap;
     gap: 22px;
     padding: 13px 16px 4px;
-    color: #496780;
+    color: #000000;
     font-size: 13px;
+    font-weight: 600;
 }
 
 .dmb-legend-item {
@@ -28,6 +29,11 @@
 
 .legend-red {
     background: #dc3d56;
+}
+
+.legend-not-filled,
+.legend-gray {
+    background: #8da2b5;
 }
 
 .legend-blue {
@@ -70,9 +76,9 @@
 .function-card-header h3 {
     margin: 0;
     overflow: hidden;
-    color: #082d4c;
-    font-size: 17px;
-    font-weight: 700;
+    color: #000000;
+    font-size: 18.5px;
+    font-weight: 750;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -112,9 +118,11 @@
 
 .function-card-subtitle {
     margin: 0;
-    padding: 11px 14px 8px;
-    color: #6e879b;
-    font-size: 12px;
+    padding: 12px 14px 8px;
+    color: #000000;
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
 }
 
 .function-stacked-bar {
@@ -128,7 +136,8 @@
 }
 
 .function-bar-met,
-.function-bar-not-met {
+.function-bar-not-met,
+.function-bar-not-filled {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -138,6 +147,8 @@
     color: #ffffff;
     font-size: 14px;
     font-weight: 700;
+    transition: width 0.3s ease;
+    user-select: none;
 }
 
 .function-bar-met {
@@ -146,6 +157,11 @@
 
 .function-bar-not-met {
     background: #dc3d56;
+}
+
+.function-bar-not-filled {
+    background: #8da2b5;
+    color: #ffffff;
 }
 
 .function-stat-grid {
@@ -172,15 +188,16 @@
 }
 
 .function-stat strong {
-    color: #082d4c;
-    font-size: 20px;
+    color: #000000;
+    font-size: 21px;
     line-height: 1;
 }
 
 .function-stat span {
     margin-top: 5px;
-    color: #6e879b;
-    font-size: 11px;
+    color: #000000;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 .function-stat .stat-green {
@@ -212,7 +229,7 @@
     color: #0877b9;
     cursor: pointer;
     font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     transition: background 0.2s ease, color 0.2s ease;
 }
@@ -242,16 +259,16 @@
     justify-content: space-between;
     gap: 7px;
     padding: 0 2px;
-    color: #082d4c;
-    font-size: 12px;
+    color: #000000;
+    font-size: 13px;
     font-weight: 700;
 }
 
 .mini-target-label {
     flex-shrink: 0;
-    color: #0877b9;
-    font-size: 10px;
-    font-weight: 600;
+    color: #000000;
+    font-size: 11px;
+    font-weight: 650;
 }
 
 .mini-gauge-graph {
@@ -281,21 +298,22 @@
 
 .continuous-red-panel p {
     margin: 9px 0 3px;
-    color: #082d4c;
-    font-size: 12px;
+    color: #000000;
+    font-size: 13px;
     font-weight: 700;
 }
 
 .continuous-red-panel small {
-    color: #8298a9;
-    font-size: 10px;
+    color: #000000;
+    font-size: 11px;
+    font-weight: 550;
     line-height: 1.3;
 }
 
 .function-empty-message {
     margin: 0;
     padding: 28px 16px;
-    color: #8298a9;
+    color: #000000;
     font-size: 13px;
     text-align: center;
 }
@@ -333,15 +351,16 @@
 
 .dmb-detail-header h3 {
     margin: 0;
-    color: #082d4c;
+    color: #000000;
     font-size: 21px;
     line-height: 1.2;
 }
 
 .detail-month-label {
     margin: 4px 0 0;
-    color: #6e879b;
+    color: #000000;
     font-size: 12px;
+    font-weight: 600;
 }
 
 .detail-summary-grid {
@@ -365,15 +384,16 @@
 }
 
 .detail-summary-item strong {
-    color: #082d4c;
+    color: #000000;
     font-size: 19px;
     line-height: 1;
 }
 
 .detail-summary-item span {
     margin-top: 4px;
-    color: #6e879b;
+    color: #000000;
     font-size: 10px;
+    font-weight: 600;
     white-space: nowrap;
 }
 
@@ -399,7 +419,7 @@
     width: 100%;
     min-width: 1050px;
     border-collapse: collapse;
-    color: #294a63;
+    color: #000000;
     font-size: 12px;
 }
 
@@ -459,23 +479,25 @@
 }
 
 .detail-kpi-name strong {
-    color: #082d4c;
+    color: #000000;
     font-size: 12px;
+    font-weight: 700;
 }
 
 .detail-kpi-definition {
     max-width: 360px;
     margin-top: 4px;
     overflow: hidden;
-    color: #8298a9;
+    color: #000000;
     font-size: 10px;
+    font-weight: 500;
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .detail-number-cell {
-    color: #082d4c;
+    color: #000000;
     font-weight: 700;
     white-space: nowrap;
 }

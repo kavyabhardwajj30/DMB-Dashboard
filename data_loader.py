@@ -7,7 +7,7 @@ import openpyxl
 
 BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = BASE_DIR / "data" / "Masterfile_DMB_Dashboard.xlsx"
-STRATEGIC_EXCEL_PATH = BASE_DIR / "data" / "Strategic Execution Dashboard-17Th_sept.xlsx"
+STRATEGIC_EXCEL_PATH = BASE_DIR / "data" / "Strategic Execution Dashboard.xlsx"
 
 
 import os
@@ -72,6 +72,96 @@ def clean_text(value):
     if pd.isna(value):
         return ""
     return str(value).replace("\xa0", " ").strip()
+
+
+CRISP_RCA_MAP = {
+    # Customer Focus - Contract Penetration
+    ("Contract Penetration", "cause"): (
+        "-1.2% vs AOP (+0.4% YoY). GRC CP% down; NAR catching up in Q3 (turnaround: Sep 2026)."
+    ),
+    ("Contract Penetration", "action"): (
+        "Driving regional funnel focus actions to accelerate recovery."
+    ),
+    # Improve Deliverability & Profitability - Adjusted EBITA %
+    ("Adjusted EBITA %", "cause"): (
+        "-1.4% vs AOP due to higher Market Sellex from baseline error."
+    ),
+    ("Adjusted EBITA %", "action"): (
+        "AOP26 baseline error from June FC 25 corrected in June FC 26. (Action closed)"
+    ),
+    # Improve Deliverability & Profitability - Inventory MAT sales
+    ("Inventory MAT sales", "cause"): (
+        "+€14M vs AOP: Growth +€3.8M (Hudut/Namibia), EU +€3.7M (demo delay), "
+        "NAM +€0.8M (improving). UIPE effect +€10M (31% vs 59% AOP; MAT 25.3% @ AOP)."
+    ),
+    ("Inventory MAT sales", "action"): (
+        "1. NAR: AOP accelerator launched for OIT-to-revenue conversion.\n"
+        "2. EU: Demo liquidation aligned to Q4 to maximize Q3 OIT.\n"
+        "3. Growth: Q3 revenue conversion for Hudut (41 systems) & Namibia tender."
+    ),
+    # Drive growth through Commercial Excellence - Order Intake Growth (EQ)
+    ("Order Intake Growth (EQ)", "cause"): (
+        "YTD -€1.5M vs plan: NAR -€4.1M, EU -€3.8M, offset by Growth +€6.5M."
+    ),
+    ("Order Intake Growth (EQ)", "action"): "",
+    ("Order Intake Growth", "cause"): (
+        "YTD -€1.5M vs plan: NAR -€4.1M, EU -€3.8M, offset by Growth +€6.5M."
+    ),
+    ("Order Intake Growth", "action"): "",
+    # Drive growth through Commercial Excellence - Comparable Sales
+    ("Comparable Sales", "cause"): (
+        "OOH shortfall for Q3 EU & Growth (35% vs €95.6M AOP). "
+        "FY OOH at 80% vs 95% target by end-Sep for FY AOP."
+    ),
+    ("Comparable Sales", "action"): (
+        "1. Launched NAR OIT-to-revenue accelerator program.\n"
+        "2. Driving additional B&B OIT in NAM & EU to bridge revenue gap to AOP.\n"
+        "3. Supply chain geared up to deliver Mexico tender (74 systems)."
+    ),
+    # Other strategic KPIs
+    ("Employee Engagement", "cause"): (
+        "EES improved vs H1-25, slightly below H2-25."
+    ),
+    ("Employee Engagement", "action"): (
+        "CS strong; Quality slightly dipped but remains highest; Marketing stable at lower scores; R&D experienced notable drop."
+    ),
+    ("Competitive Roadmap", "cause"): (
+        "Z10/Z30 OIT below Q2 AOP due to NPIs & GE/Siemens price pressure."
+    ),
+    ("Competitive Roadmap", "action"): (
+        "Targeting Philips Installed Base (IB) opportunities via account mapping and promotions to improve win rate."
+    ),
+    ("Vitality index", "action"): (
+        "Enhancing Z10 & Z30 competitiveness via sales training and POS service bundling to address price gap."
+    ),
+    ("% of CAPA investgation", "action"): (
+        "CAPA investigation completion targeted in July."
+    ),
+    ("Productivity", "cause"): (
+        "YTD Aug productivity on track."
+    ),
+}
+
+
+def get_crisp_rca_text(kpi_name, text, text_type="cause"):
+    if not text:
+        return ""
+    text_str = str(text).strip()
+    if not text_str or text_str.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided", "no corrective actions provided", "no action", "no actions", "no actions provided"}:
+        return ""
+    
+    k_name = str(kpi_name).strip()
+    t_type = text_type.lower().strip()
+    
+    if (k_name, t_type) in CRISP_RCA_MAP:
+        return CRISP_RCA_MAP[(k_name, t_type)]
+    
+    base_name = re.sub(r"\s*\((EQ|CS)\)", "", k_name).strip()
+    if (base_name, t_type) in CRISP_RCA_MAP:
+        return CRISP_RCA_MAP[(base_name, t_type)]
+        
+    return clean_text(text)
+
 
 
 QUARTER_END_MONTHS = {"1": 3, "2": 6, "3": 9, "4": 12}
@@ -496,30 +586,32 @@ def load_dmb_data(excel_path=EXCEL_PATH):
     )
 
 
-FUNCTIONAL_REVIEW_PATH = BASE_DIR / "data" / "Functional DMB Review Sheets-17th_sept.xlsx"
+FUNCTIONAL_REVIEW_PATH = BASE_DIR / "data" / "Functional DMB Review Sheets.xlsx"
 
 
 def load_red_kpis_rca(file_path=None):
     """
-    Parses Functional DMB Review Sheets-17th_sept.xlsx (or configured file) for Red KPIs RCA
+    Parses Functional DMB Review Sheets (or configured file) for Red KPIs RCA
     and corrective action tracker entries.
     """
     if file_path is None:
-        file_path = FUNCTIONAL_REVIEW_PATH
+        if FUNCTIONAL_REVIEW_PATH.exists():
+            file_path = FUNCTIONAL_REVIEW_PATH
+        else:
+            data_dir = BASE_DIR / "data"
+            matching = [
+                p for p in data_dir.glob("*.xlsx")
+                if not p.name.startswith("~$") and not p.name.startswith(".")
+                and ("functional" in p.name.lower() or "review" in p.name.lower())
+                and "master" not in p.name.lower()
+            ]
+            if matching:
+                file_path = max(matching, key=lambda p: p.stat().st_mtime)
+            else:
+                file_path = FUNCTIONAL_REVIEW_PATH
     file_path = Path(file_path)
     if not file_path.exists():
-        data_dir = file_path.parent
-        matching = (
-            list(data_dir.glob("*17th*sept*.xlsx"))
-            or list(data_dir.glob("*17Th*sept*.xlsx"))
-            or list(data_dir.glob("*Functional*Review*.xlsx"))
-            or list(data_dir.glob("*Review*.xlsx"))
-            or list(data_dir.glob("*Strategic*Execution*.xlsx"))
-        )
-        if matching:
-            file_path = matching[0]
-        else:
-            return []
+        return []
 
     try:
         file_bytes = read_file_safe_bytes(file_path)
@@ -783,8 +875,8 @@ def load_strategic_rca_actions(excel_path=None):
                     "target": t_num,
                     "actual": a_num,
                     "is_red": is_red,
-                    "cause": cause,
-                    "action": action,
+                    "cause": get_crisp_rca_text(kpi_name, cause, "cause"),
+                    "action": get_crisp_rca_text(kpi_name, action, "action"),
                 })
 
     result = pd.DataFrame(records)
@@ -801,10 +893,36 @@ def find_masterfile(data_dir=None):
 
     preferred_file = data_dir / "Masterfile_DMB_Dashboard.xlsx"
 
+    # Check if preferred file exists and is complete (>= 180 rows in DMB Masterfile)
+    if preferred_file.exists():
+        try:
+            from scripts.sync_to_masterfile import validate_masterfile_content
+            is_valid, _, dmb_r, _ = validate_masterfile_content(read_file_safe_bytes(preferred_file))
+            if is_valid:
+                return preferred_file
+            else:
+                # Truncated or invalid -> auto rebuild from live functional & strategic workbooks
+                from scripts.sync_to_masterfile import sync_masterfile
+                sync_res = sync_masterfile()
+                if sync_res.get("success"):
+                    return preferred_file
+        except Exception:
+            pass
+
+    # If preferred file doesn't exist, trigger auto-sync from live review workbooks
+    if not preferred_file.exists():
+        try:
+            from scripts.sync_to_masterfile import sync_masterfile
+            sync_res = sync_masterfile()
+            if sync_res.get("success"):
+                return preferred_file
+        except Exception:
+            pass
+
     candidates = sorted(
         file_path
         for file_path in data_dir.glob("*.xlsx")
-        if not file_path.name.startswith("~$")
+        if not file_path.name.startswith("~$") and not file_path.name.startswith(".")
     )
 
     if preferred_file.exists():

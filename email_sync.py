@@ -42,11 +42,11 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 XLSX_MAGIC = b"PK\x03\x04"
 
-# Exact canonical file names expected in data/
+# Canonical file names expected in data/
 TARGET_FILENAMES = {
     "masterfile": "Masterfile_DMB_Dashboard.xlsx",
-    "functional_review": "Functional DMB Review Sheets-17th_sept.xlsx",
-    "strategic_execution": "Strategic Execution Dashboard-17Th_sept.xlsx",
+    "functional_review": "Functional DMB Review Sheets.xlsx",
+    "strategic_execution": "Strategic Execution Dashboard.xlsx",
 }
 
 
@@ -172,7 +172,16 @@ def push_to_github_if_configured(filename: str, content: bytes) -> bool:
     repo = get_configured_github_repo()
     if not token:
         logger.debug("GITHUB_TOKEN not configured; skipping automatic GitHub commit.")
-        return False
+    # If pushing masterfile, ensure it is complete and valid
+    if "masterfile" in filename.lower():
+        try:
+            from scripts.sync_to_masterfile import validate_masterfile_content
+            is_valid, err_msg, dmb_r, mpr_r = validate_masterfile_content(content)
+            if not is_valid:
+                logger.warning("Refusing to push invalid/truncated Masterfile to GitHub: %s", err_msg)
+                return False
+        except Exception as e:
+            logger.warning("Masterfile pre-push validation notice: %s", e)
 
     try:
         path = f"data/{filename}"

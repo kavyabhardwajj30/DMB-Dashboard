@@ -6,7 +6,9 @@ import re
 import threading
 from zipfile import BadZipFile
 
+import dash
 from dash import ALL, Dash, Input, Output, State, ctx, dcc, html, no_update
+from dash.exceptions import PreventUpdate
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 import pandas as pd
@@ -1041,12 +1043,13 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
     """
     Returns (available_months, default_month) dynamically:
     - Automatically includes all completed months from January of the year up to
-      the previous calendar month (e.g. in September 2026 -> Jan-Aug 2026;
-      when October 2026 starts -> Jan-Sep 2026 automatically).
-    - Capped at the previous completed calendar month (current month - 1).
-    - Plus any historical months with actual data present in the dataset (up to current month - 1).
-    - Plus any historical months present in strategic/functional RCA actions (up to current month - 1).
-    - Default month is the latest completed calendar month (current month - 1).
+      the target reporting month (current month - 2).
+      (e.g. in October 2026 -> Jan-Aug 2026;
+       when November 2026 starts -> Jan-Sep 2026 automatically).
+    - Capped at the target reporting month (current month - 2).
+    - Plus any historical months with actual data present in the dataset (up to current month - 2).
+    - Plus any historical months present in strategic/functional RCA actions (up to current month - 2).
+    - Default month is current month - 2.
     """
     if reference_date is None:
         ref_dt = pd.Timestamp.now()
@@ -1054,9 +1057,10 @@ def get_dynamic_reporting_months(data=None, rca_actions_df=None, reference_date=
         ref_dt = pd.Timestamp(reference_date)
 
     current_month_start = pd.Timestamp(year=ref_dt.year, month=ref_dt.month, day=1)
-    latest_completed_month = (current_month_start - pd.DateOffset(months=1)).floor("D")
+    latest_completed_month = (current_month_start - pd.DateOffset(months=2)).floor("D")
 
-    start_month = pd.Timestamp(year=ref_dt.year, month=1, day=1)
+    start_year_month = pd.Timestamp(year=latest_completed_month.year, month=1, day=1)
+    start_month = start_year_month
     if data is not None and "month" in data.columns and not data["month"].dropna().empty:
         min_m = data["month"].dropna().min()
         if pd.notna(min_m) and pd.Timestamp(min_m) < start_month:
@@ -1266,23 +1270,31 @@ def section_header(
     elif default_value is None:
         default_value = default_month.strftime("%Y-%m-%d")
 
+    title_children = [html.H2(title)]
+    if subtitle:
+        title_children.append(html.P(subtitle))
+
+    control_children = []
+    if filter_label:
+        control_children.append(html.Label(filter_label))
+    control_children.append(
+        dcc.Dropdown(
+            id=filter_id,
+            options=filter_options,
+            value=default_value,
+            clearable=False,
+            searchable=False,
+            optionHeight=40,
+            maxHeight=280,
+            className="section-month-dropdown",
+        )
+    )
+
     return html.Div(
         [
-            html.Div([html.H2(title), html.P(subtitle)]),
+            html.Div(title_children),
             html.Div(
-                [
-                    html.Label(filter_label),
-                    dcc.Dropdown(
-                        id=filter_id,
-                        options=filter_options,
-                        value=default_value,
-                        clearable=False,
-                        searchable=False,
-                        optionHeight=40,
-                        maxHeight=280,
-                        className="section-month-dropdown",
-                    ),
-                ],
+                control_children,
                 className="section-month-control",
             ),
         ],
@@ -1292,8 +1304,21 @@ def section_header(
 
 
 # =========================================================
-# GAUGE CHART
+# GAUGE CHART & FORMATTING
 # =========================================================
+
+def format_percentage(val):
+    if val is None or pd.isna(val):
+        return "—"
+    try:
+        val_float = float(val)
+        rounded = round(val_float, 1)
+        if rounded == 100 or rounded == int(rounded):
+            return f"{int(rounded)}%"
+        return f"{rounded:.1f}%"
+    except (ValueError, TypeError):
+        return str(val)
+
 
 def create_gauge(value):
     gauge_color = "#168b69" if value >= GAUGE_TARGET else "#dc3d56"
@@ -1313,9 +1338,9 @@ def create_gauge(value):
                     "tickfont": {
                         "family": "Segoe UI",
                         "size": 12,
-                        "color": "#496780",
+                        "color": "#000000",
                     },
-                    "tickcolor": "#496780",
+                    "tickcolor": "#000000",
                     "tickwidth": 1,
                     "ticklen": 4,
                 },
@@ -1346,12 +1371,12 @@ def create_gauge(value):
     figure.add_annotation(
         x=0.5,
         y=0.38,
-        text=f"<b>{value:.1f}%</b>",
+        text=f"<b>{format_percentage(value)}</b>",
         showarrow=False,
         font={
             "family": "Segoe UI",
             "size": 36,
-            "color": "#082d4c",
+            "color": "#000000",
         },
     )
 
@@ -1363,7 +1388,7 @@ def create_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 13,
-            "color": "#496780",
+            "color": "#000000",
         },
     )
 
@@ -1406,9 +1431,9 @@ def create_mini_gauge(value):
                     "tickfont": {
                         "family": "Segoe UI",
                         "size": 9,
-                        "color": "#496780",
+                        "color": "#000000",
                     },
-                    "tickcolor": "#496780",
+                    "tickcolor": "#000000",
                     "tickwidth": 1,
                     "ticklen": 3,
                 },
@@ -1430,7 +1455,7 @@ def create_mini_gauge(value):
         )
     )
 
-    display_text = "<b>—</b>" if is_no_data else f"<b>{value:.1f}%</b>"
+    display_text = "<b>—</b>" if is_no_data else f"<b>{format_percentage(value)}</b>"
     figure.add_annotation(
         x=0.5,
         y=0.34,
@@ -1439,7 +1464,7 @@ def create_mini_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 27,
-            "color": "#082d4c",
+            "color": "#000000",
         },
     )
 
@@ -1451,7 +1476,7 @@ def create_mini_gauge(value):
         font={
             "family": "Segoe UI",
             "size": 11,
-            "color": "#6e879b",
+            "color": "#000000",
         },
     )
 
@@ -1469,15 +1494,31 @@ def create_mini_gauge(value):
 
 
 def create_function_card(function_name, current_data):
+    active_dmb = get_active_dmb_data()
     if not current_data.empty and "function" in current_data.columns:
         if function_name == "ISC & Procurement":
             function_rows = current_data[
                 current_data["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
             ].copy()
+            known_kpis = set(
+                active_dmb[
+                    active_dmb["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
+                ]["kpi_name"].dropna().unique()
+            ) if not active_dmb.empty and "function" in active_dmb.columns else set()
         else:
             function_rows = current_data[current_data["function"].eq(function_name)].copy()
+            known_kpis = set(
+                active_dmb[
+                    active_dmb["function"].eq(function_name)
+                ]["kpi_name"].dropna().unique()
+            ) if not active_dmb.empty and "function" in active_dmb.columns else set()
     else:
         function_rows = pd.DataFrame()
+        known_kpis = set()
+
+    month_kpis = set(function_rows["kpi_name"].dropna().unique()) if not function_rows.empty and "kpi_name" in function_rows.columns else set()
+    all_kpis = known_kpis.union(month_kpis)
+    total_expected = max(len(all_kpis), len(function_rows))
 
     valid = (
         function_rows[
@@ -1487,6 +1528,59 @@ def create_function_card(function_name, current_data):
         if not function_rows.empty
         else pd.DataFrame()
     )
+
+    met = int(valid["is_met"].sum()) if not valid.empty else 0
+    not_met = int(valid["status"].eq("Not Met").sum()) if not valid.empty else 0
+    filled = met + not_met
+    not_filled = max(0, total_expected - filled)
+    total = filled + not_filled
+
+    if total > 0:
+        met_share = met / total * 100
+        not_met_share = not_met / total * 100
+        not_filled_share = not_filled / total * 100
+    else:
+        met_share = 0
+        not_met_share = 0
+        not_filled_share = 100
+
+    bar_segments = []
+    if met > 0:
+        bar_segments.append(
+            html.Div(
+                str(met),
+                className="function-bar-met",
+                style={"width": f"{met_share}%"},
+                title=f"{met} KPIs met",
+            )
+        )
+    if not_met > 0:
+        bar_segments.append(
+            html.Div(
+                str(not_met),
+                className="function-bar-not-met",
+                style={"width": f"{not_met_share}%"},
+                title=f"{not_met} KPIs not met",
+            )
+        )
+    if not_filled > 0:
+        bar_segments.append(
+            html.Div(
+                str(not_filled),
+                className="function-bar-not-filled",
+                style={"width": f"{not_filled_share}%"},
+                title=f"{not_filled} KPIs not filled",
+            )
+        )
+    if not bar_segments:
+        bar_segments.append(
+            html.Div(
+                "0",
+                className="function-bar-not-filled",
+                style={"width": "100%"},
+                title="0 KPIs",
+            )
+        )
 
     if valid.empty:
         return html.Div(
@@ -1503,13 +1597,7 @@ def create_function_card(function_name, current_data):
                     className="function-card-subtitle",
                 ),
                 html.Div(
-                    [
-                        html.Div(
-                            "0",
-                            className="function-bar-met",
-                            style={"width": "100%", "background": "#dce6ed", "color": "#768b9c"},
-                        ),
-                    ],
+                    bar_segments,
                     className="function-stacked-bar",
                 ),
                 html.Div(
@@ -1559,16 +1647,8 @@ def create_function_card(function_name, current_data):
             className="function-card",
         )
 
-    total = len(valid)
-    met = int(valid["is_met"].sum())
-    not_met = int(valid["status"].eq("Not Met").sum())
-    improved = int(valid["is_improved"].sum())
-    continuous_red = int(valid["is_continuous_red"].sum())
     positive = int(valid["is_met_or_improved"].sum())
-
-    performance = positive / total * 100 if total else 0
-    met_share = met / total * 100 if total else 0
-    not_met_share = not_met / total * 100 if total else 0
+    performance = positive / len(valid) * 100 if len(valid) else 0
 
     comparison = valid[
         valid["previous_status"].isin(["Met", "Not Met"])
@@ -1609,18 +1689,7 @@ def create_function_card(function_name, current_data):
                 className="function-card-subtitle",
             ),
             html.Div(
-                [
-                    html.Div(
-                        str(met),
-                        className="function-bar-met",
-                        style={"width": f"{met_share}%"},
-                    ),
-                    html.Div(
-                        str(not_met),
-                        className="function-bar-not-met",
-                        style={"width": f"{not_met_share}%"},
-                    ),
-                ],
+                bar_segments,
                 className="function-stacked-bar",
             ),
             html.Div(
@@ -2052,8 +2121,8 @@ def create_rca_table(selected_month):
         c_val = str(r.get("cause", "")).strip()
         a_val = str(r.get("action", "")).strip()
 
-        c_clean = "" if (not c_val or c_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else c_val
-        a_clean = "" if (not a_val or a_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else a_val
+        c_clean = "" if (not c_val or c_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else data_loader.get_crisp_rca_text(k_name, c_val, "cause")
+        a_clean = "" if (not a_val or a_val.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else data_loader.get_crisp_rca_text(k_name, a_val, "action")
 
         if c_clean and k_name not in strategic_cause_map:
             strategic_cause_map[k_name] = c_clean
@@ -2067,8 +2136,11 @@ def create_rca_table(selected_month):
         curr_c = str(row.get("cause", "")).strip()
         curr_a = str(row.get("action", "")).strip()
 
-        cause_val = curr_c if (curr_c and curr_c.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else strategic_cause_map.get(kpi_name_val, "")
-        action_val = curr_a if (curr_a and curr_a.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else strategic_action_map.get(kpi_name_val, "")
+        raw_c = curr_c if (curr_c and curr_c.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided"}) else strategic_cause_map.get(kpi_name_val, "")
+        raw_a = curr_a if (curr_a and curr_a.lower() not in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no corrective actions provided", "no action", "no actions", "no actions provided"}) else strategic_action_map.get(kpi_name_val, "")
+
+        cause_val = data_loader.get_crisp_rca_text(kpi_name_val, raw_c, "cause")
+        action_val = data_loader.get_crisp_rca_text(kpi_name_val, raw_a, "action")
 
         is_cause_missing = (
             not cause_val
@@ -2247,7 +2319,7 @@ def create_pareto_chart(causes):
         },
         xaxis={
             "title": "Causes ranked by impact",
-            "tickfont": {"size": 10, "color": "#294a63"},
+            "tickfont": {"size": 10, "color": "#000000"},
             "showgrid": False,
             "automargin": True,
         },
@@ -2258,7 +2330,7 @@ def create_pareto_chart(causes):
             "dtick": 20,
             "gridcolor": "#dfe8ee",
             "zeroline": False,
-            "tickfont": {"size": 9, "color": "#496780"},
+            "tickfont": {"size": 9, "color": "#000000"},
         },
         yaxis2={
             "title": {
@@ -2303,7 +2375,7 @@ def create_pareto_chart(causes):
                 "font": {"size": 8, "color": "#a66b00"},
             }
         ],
-        font={"family": "Segoe UI", "color": "#294a63"},
+        font={"family": "Segoe UI", "color": "#000000"},
     )
 
     return figure
@@ -2948,9 +3020,9 @@ def create_imperative_chart(current_data):
                 ],
                 "line": {"color": "#ffffff", "width": 1},
             },
-            text=summary["percentage"].map(lambda value: f"{value:.1f}%"),
+            text=summary["percentage"].map(format_percentage),
             textposition="outside",
-            textfont={"size": 12, "color": "#082d4c"},
+            textfont={"size": 12, "color": "#000000"},
             cliponaxis=False,
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
@@ -2984,7 +3056,7 @@ def create_imperative_chart(current_data):
             "showgrid": False,
             "zeroline": False,
             "fixedrange": True,
-            "tickfont": {"size": 10, "color": "#496780"},
+            "tickfont": {"size": 10, "color": "#000000"},
             "automargin": True,
         },
         yaxis={
@@ -2996,9 +3068,9 @@ def create_imperative_chart(current_data):
             "gridwidth": 1,
             "zeroline": False,
             "fixedrange": True,
-            "tickfont": {"size": 10, "color": "#6e879b"},
+            "tickfont": {"size": 10, "color": "#000000"},
         },
-        font={"family": "Segoe UI", "color": "#496780"},
+        font={"family": "Segoe UI", "color": "#000000"},
     )
 
     return figure
@@ -3087,7 +3159,7 @@ def create_trend_chart(selected_month):
         figure.add_annotation(
             x=selected_month,
             y=selected_result["met_percentage"],
-            text=f"<b>{selected_result['met_percentage']:.1f}%</b>",
+            text=f"<b>{format_percentage(selected_result['met_percentage'])}</b>",
             showarrow=False,
             xshift=30,
             yshift=10,
@@ -3097,7 +3169,7 @@ def create_trend_chart(selected_month):
         figure.add_annotation(
             x=selected_month,
             y=selected_result["improved_percentage"],
-            text=f"<b>{selected_result['improved_percentage']:.1f}%</b>",
+            text=f"<b>{format_percentage(selected_result['improved_percentage'])}</b>",
             showarrow=False,
             xshift=30,
             yshift=-12,
@@ -3114,12 +3186,13 @@ def create_trend_chart(selected_month):
             "orientation": "h",
             "x": 0.62,
             "y": 1.18,
-            "font": {"size": 12},
+            "font": {"size": 12, "color": "#000000"},
         },
         xaxis={
             "tickformat": "%b",
             "gridcolor": "#dce6ed",
             "zeroline": False,
+            "tickfont": {"color": "#000000"},
         },
         yaxis={
             "range": [0, 105],
@@ -3127,11 +3200,12 @@ def create_trend_chart(selected_month):
             "gridcolor": "#dce6ed",
             "zeroline": False,
             "dtick": 25,
+            "tickfont": {"color": "#000000"},
         },
         font={
             "family": "Segoe UI",
             "size": 12,
-            "color": "#496780",
+            "color": "#000000",
         },
     )
 
@@ -3303,42 +3377,24 @@ def serve_layout():
                 [
                     html.Div(
                         [
-                            html.Div("D", className="brand-logo"),
-                            html.Div(
-                                [
-                                    html.H1("DMB Performance Dashboard"),
-                                    html.P("Executive KPI view · 2026"),
-                                ],
-                                className="brand-text",
+                            html.H1(
+                                f"{curr_default_mpr_month.strftime('%B')} MoS DMB Performance Review - AOP Critical",
+                                id="dashboard-header-title",
                             ),
                         ],
-                        className="brand-section",
+                        className="brand-text",
                     ),
-                    html.Nav(
+                    html.Div(
                         [
-                            html.A(
-                                "MPR",
-                                href="#mpr-section",
-                                id="nav-tab-mpr",
-                                className=(
-                                    "navigation-tab navigation-tab-active"
-                                ),
-                            ),
-                            html.A(
-                                "DMB",
-                                href="#dmb-section",
-                                id="nav-tab-dmb",
-                                className="navigation-tab",
+                            html.Button(
+                                "Download 1 Pager",
+                                id="download-one-pager-button",
+                                className="download-button",
+                                n_clicks=0,
+                                title="Download the complete dashboard as one long PNG image",
                             ),
                         ],
-                        className="navigation-tabs",
-                    ),
-                    html.Button(
-                        "Download 1 Pager",
-                        id="download-one-pager-button",
-                        className="download-button",
-                        n_clicks=0,
-                        title="Download the complete dashboard as one long PNG image",
+                        className="top-nav-actions",
                     ),
                 ],
                 className="top-navigation",
@@ -3398,9 +3454,9 @@ def serve_layout():
                 [
                     section_header(
                         "mpr-section",
-                        "MPR — Overall MoS KPI Performance",
-                        "Critical KPI performance by strategic imperative",
-                        "MPR month",
+                        "Overall MoS KPI Performance",
+                        None,
+                        None,
                         "mpr-month-filter",
                         create_month_options(curr_mpr_months),
                         default_value=mpr_str,
@@ -3525,8 +3581,8 @@ def serve_layout():
                     section_header(
                         "dmb-section",
                         "DMB — Function-wise KPI Performance",
-                        "Core, enabling and mandatory outcome performance",
-                        "DMB month",
+                        None,
+                        None,
                         "dmb-month-filter",
                         create_month_options(curr_dmb_months),
                         default_value=dmb_str,
@@ -3548,6 +3604,15 @@ def serve_layout():
                                         className="legend-dot legend-red"
                                     ),
                                     html.Span("KPIs not met"),
+                                ],
+                                className="dmb-legend-item",
+                            ),
+                            html.Div(
+                                [
+                                    html.Span(
+                                        className="legend-dot legend-not-filled"
+                                    ),
+                                    html.Span("KPIs not filled"),
                                 ],
                                 className="dmb-legend-item",
                             ),
@@ -3622,11 +3687,14 @@ def serve_layout():
                                         ]
                                     ),
                                     html.Button(
-                                        "×",
+                                        [
+                                            html.Span("←", className="modal-back-arrow"),
+                                            html.Span("Back", className="modal-back-text"),
+                                        ],
                                         id="close-continuous-red-modal",
                                         n_clicks=0,
                                         className="continuous-red-modal-close",
-                                        title="Close details",
+                                        title="Back to Dashboard",
                                     ),
                                 ],
                                 className="continuous-red-modal-header",
@@ -3683,14 +3751,37 @@ def refresh_month_dropdown_options(sync_data):
     curr_mpr_months, _ = get_dynamic_reporting_months(active_mpr, active_strat)
     curr_dmb_months, _ = get_dynamic_reporting_months(active_dmb, active_strat)
 
-    return create_month_options(curr_mpr_months), create_month_options(curr_dmb_months)
+    mpr_opts = create_month_options(curr_mpr_months)
+    return mpr_opts, create_month_options(curr_dmb_months)
+
+
+@app.callback(
+    Output("mpr-month-filter", "value"),
+    Output("dmb-month-filter", "value"),
+    Input("mpr-month-filter", "value"),
+    Input("dmb-month-filter", "value"),
+    prevent_initial_call=True,
+)
+def sync_all_month_filters(mpr_val, dmb_val):
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+            if triggered_id == "mpr-month-filter" and mpr_val:
+                return no_update, mpr_val
+            elif triggered_id == "dmb-month-filter" and dmb_val:
+                return dmb_val, no_update
+    except Exception:
+        pass
+    raise PreventUpdate
 
 
 # =========================================================
-# MPR CALLBACK
+# MPR CALLBACK (Executive MoS & Imperative Performance)
 # =========================================================
 
 @app.callback(
+    Output("dashboard-header-title", "children"),
     Output("mpr-total-kpis", "children"),
     Output("mpr-met-kpis", "children"),
     Output("mpr-not-met-kpis", "children"),
@@ -3708,35 +3799,78 @@ def refresh_month_dropdown_options(sync_data):
     Output("concerns-content", "children"),
     Output("concerns-count", "children"),
     Input("mpr-month-filter", "value"),
+    Input("dmb-month-filter", "value"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,
 )
-def update_mpr_dashboard(month_value, sync_data):
-    return get_mpr_dashboard_content(month_value)
+def update_mpr_dashboard(mpr_val, dmb_val, sync_data):
+    month_value = mpr_val or dmb_val
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            trig = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trig == "mpr-month-filter" and mpr_val:
+                month_value = mpr_val
+            elif trig == "dmb-month-filter" and dmb_val:
+                month_value = dmb_val
+    except Exception:
+        pass
+    selected_month = pd.Timestamp(month_value)
+    heading_title = f"{selected_month.strftime('%B')} MoS DMB Performance Review - AOP Critical"
+    mpr_content = get_mpr_dashboard_content(month_value)
+    return (heading_title, *mpr_content)
 
 
 # =========================================================
-# DMB FUNCTION-CARD CALLBACK
+# DMB FUNCTION-CARD CALLBACK (Function-wise Performance)
 # =========================================================
 
 @app.callback(
     Output("function-cards-container", "children"),
     Input("dmb-month-filter", "value"),
+    Input("mpr-month-filter", "value"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,
 )
-def update_dmb_function_cards(month_value, sync_data):
+def update_dmb_function_cards(dmb_val, mpr_val, sync_data):
+    month_value = dmb_val or mpr_val
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            trig = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trig == "dmb-month-filter" and dmb_val:
+                month_value = dmb_val
+            elif trig == "mpr-month-filter" and mpr_val:
+                month_value = mpr_val
+    except Exception:
+        pass
     return get_dmb_function_cards_content(month_value)
 
+
+# =========================================================
+# RCA CALLBACK (MoS Level Cause & Actions)
+# =========================================================
 
 @app.callback(
     Output("rca-table-container", "children"),
     Output("rca-reporting-month", "children"),
     Input("mpr-month-filter", "value"),
+    Input("dmb-month-filter", "value"),
     Input("live-sync-state-store", "data"),
     prevent_initial_call=True,
 )
-def update_rca_table(month_value, sync_data):
+def update_rca_table(mpr_val, dmb_val, sync_data):
+    month_value = mpr_val or dmb_val
+    try:
+        ctx = dash.callback_context
+        if ctx and ctx.triggered:
+            trig = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trig == "mpr-month-filter" and mpr_val:
+                month_value = mpr_val
+            elif trig == "dmb-month-filter" and dmb_val:
+                month_value = dmb_val
+    except Exception:
+        pass
     return get_rca_table_content(month_value)
 
 

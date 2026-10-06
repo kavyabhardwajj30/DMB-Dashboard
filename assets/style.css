@@ -6,9 +6,9 @@
     --red: #dc3d56;
     --amber: #c18100;
     --purple: #8b5cf6;
-    --text-dark: #082d4c;
-    --text-medium: #496780;
-    --text-muted: #6e879b;
+    --text-dark: #000000;
+    --text-medium: #000000;
+    --text-muted: #000000;
     --page-background: #edf4f8;
     --card-background: #ffffff;
     --card-border: #d5e1e9;
@@ -66,12 +66,12 @@ textarea {
    ========================================================= */
 
 .top-navigation {
-    display: grid !important;
-    grid-template-columns: minmax(300px, 1fr) auto minmax(300px, 1fr);
+    display: flex !important;
     align-items: center !important;
-    gap: 28px;
-    min-height: 104px;
-    padding: 18px 26px;
+    justify-content: space-between !important;
+    gap: 20px;
+    min-height: 80px;
+    padding: 16px 26px;
     background: linear-gradient(110deg, #06456f 0%, #075a86 100%);
     color: #ffffff;
 }
@@ -106,11 +106,24 @@ textarea {
     margin: 0;
     overflow: hidden;
     color: #ffffff !important;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 750;
-    line-height: 1.2;
+    line-height: 1.25;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.top-nav-actions {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.header-month-dropdown {
+    width: 205px;
+    min-width: 205px;
 }
 
 .brand-text p {
@@ -158,26 +171,29 @@ textarea {
 }
 
 .download-button {
-    justify-self: end;
-    min-width: 158px;
-    min-height: 52px;
-    padding: 12px 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    height: 42px;
+    padding: 0 18px;
     border: 0;
-    border-radius: 11px;
+    border-radius: 9px;
     background: #ffffff;
     color: var(--navy) !important;
     cursor: pointer;
-    font-size: 17px;
-    font-weight: 750;
-    box-shadow: 0 7px 18px rgba(3, 43, 74, 0.15);
+    font-size: 15px;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(3, 43, 74, 0.12);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    white-space: nowrap;
 }
 
 .download-button:hover,
 .download-button:focus-visible {
     outline: none;
-    transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(3, 43, 74, 0.22);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(3, 43, 74, 0.18);
 }
 
 /* =========================================================
@@ -186,36 +202,36 @@ textarea {
 
 .executive-insights-section {
     overflow: hidden;
-    margin: 18px 0 24px;
+    margin: 16px 0 22px;
     border: 1px solid #d5e1e9;
     border-radius: 12px;
     background: #ffffff;
-    box-shadow: 0 8px 24px rgba(23, 63, 91, 0.09);
+    box-shadow: 0 6px 20px rgba(23, 63, 91, 0.08);
 }
 
 .insights-title-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
-    min-height: 54px;
-    padding: 12px 18px;
-    background: #d33c55;
+    gap: 16px;
+    min-height: 72px;
+    padding: 14px 18px;
+    background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
     color: #ffffff;
 }
 
 .insights-title-bar h2 {
     margin: 0;
-    color: #ffffff;
-    font-size: 22px;
-    font-weight: 700;
+    color: #ffffff !important;
+    font-size: 23px;
+    font-weight: 750;
     line-height: 1.25;
 }
 
 .insights-month {
     flex-shrink: 0;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
 }
 
@@ -223,19 +239,19 @@ textarea {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 14px;
-    padding: 16px;
+    padding: 14px 18px;
 }
 
 .insight-card {
     min-width: 0;
-    min-height: 140px;
-    max-height: 250px;
-    overflow-y: auto;
-    padding: 15px 17px;
+    min-height: 130px;
+    height: auto;
+    overflow: visible;
+    padding: 14px 16px;
     border: 1px solid var(--card-border);
-    border-radius: 12px;
+    border-radius: 10px;
     background: var(--card-background) !important;
-    box-shadow: 0 6px 17px rgba(23, 63, 91, 0.07);
+    box-shadow: 0 4px 14px rgba(23, 63, 91, 0.06);
 }
 
 .highlight-card {
@@ -254,15 +270,15 @@ textarea {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    gap: 12px;
-    padding-bottom: 10px;
+    gap: 10px;
+    padding-bottom: 8px;
     border-bottom: 1px solid #e5edf2;
 }
 
 .insight-title-row h3 {
     margin: 0;
     color: var(--text-dark) !important;
-    font-size: 17px;
+    font-size: 20px;
     font-weight: 750;
 }
 
@@ -282,33 +298,38 @@ textarea {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 27px;
-    min-width: 27px;
-    height: 27px;
-    padding: 0 7px;
-    border-radius: 14px;
+    flex: 0 0 26px;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 4px;
+    border-radius: 13px;
     background: #edf3f7;
-    color: var(--text-medium);
-    font-size: 12px;
-    font-weight: 750;
+    color: #000000;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .insight-list {
-    margin: 11px 0 0;
-    padding-left: 18px;
-    color: var(--text-medium) !important;
-    font-size: 13px;
+    margin: 10px 0 0;
+    padding-left: 20px;
+    color: #000000 !important;
+    font-size: 15px;
     line-height: 1.5;
 }
 
 .insight-list li {
-    margin-bottom: 5px;
+    margin-bottom: 6px;
+    color: #000000 !important;
+}
+
+.insight-list li:last-child {
+    margin-bottom: 0;
 }
 
 .empty-message {
-    margin: 14px 0 0;
-    color: #8298a9 !important;
-    font-size: 13px;
+    margin: 10px 0 0;
+    color: #000000 !important;
+    font-size: 15px;
 }
 
 /* =========================================================
@@ -329,8 +350,8 @@ textarea {
     align-items: center !important;
     justify-content: space-between !important;
     gap: 24px;
-    min-height: 70px;
-    padding: 13px 16px;
+    min-height: 72px;
+    padding: 14px 18px;
     scroll-margin-top: 16px;
     background: linear-gradient(105deg, #07537f 0%, #075b88 100%);
     color: #ffffff;
@@ -339,7 +360,7 @@ textarea {
 .section-header h2 {
     margin: 0;
     color: #ffffff !important;
-    font-size: 21px;
+    font-size: 23px;
     font-weight: 750;
     line-height: 1.25;
 }
@@ -347,7 +368,7 @@ textarea {
 .section-header p {
     margin: 4px 0 0;
     color: #d6eaf5 !important;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .section-month-control {
@@ -361,7 +382,7 @@ textarea {
 .section-month-control label {
     flex-shrink: 0;
     color: #ffffff !important;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 650;
 }
 
@@ -501,13 +522,13 @@ textarea {
 .kpi-summary-grid {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 12px;
-    padding: 12px 12px 0;
+    gap: 14px;
+    padding: 14px 14px 0;
 }
 
 .kpi-summary-group {
     display: grid;
-    gap: 9px;
+    gap: 10px;
     min-width: 0;
 }
 
@@ -520,14 +541,14 @@ textarea {
 }
 
 .kpi-summary-group + .kpi-summary-group {
-    padding-left: 12px;
+    padding-left: 14px;
     border-left: 2.5px solid #94a3b8;
 }
 
 .kpi-summary-card {
     min-width: 0;
-    min-height: 98px;
-    padding: 15px 14px;
+    min-height: 110px;
+    padding: 16px 16px;
     border: 1px solid #e1e9ef;
     border-radius: 10px;
     background: var(--soft-panel) !important;
@@ -536,29 +557,31 @@ textarea {
 .kpi-card-label {
     margin: 0;
     overflow: hidden;
-    color: var(--text-muted) !important;
-    font-size: 12px;
-    font-weight: 500;
+    color: #000000 !important;
+    font-size: 18px;
+    font-weight: 750;
     text-overflow: ellipsis;
     white-space: nowrap;
+    letter-spacing: 0.01em;
 }
 
 .kpi-value-row {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    margin-top: 16px;
+    margin-top: 10px;
 }
 
 .kpi-card-value {
-    font-size: 33px;
-    font-weight: 750;
+    font-size: 34px;
+    font-weight: 500;
     line-height: 1;
 }
 
 .kpi-card-secondary {
-    color: var(--text-medium);
-    font-size: 13px;
+    color: #000000;
+    font-size: 15px;
+    font-weight: 500;
 }
 
 /* =========================================================
@@ -594,15 +617,15 @@ textarea {
 
 .chart-title-row h3 {
     margin: 0;
-    color: var(--text-dark) !important;
-    font-size: 15px;
+    color: #000000 !important;
+    font-size: 16.5px;
     font-weight: 750;
 }
 
 .chart-note {
     flex-shrink: 0;
-    color: var(--text-muted) !important;
-    font-size: 11px;
+    color: #000000 !important;
+    font-size: 12px;
 }
 
 .gauge-chart-card #mpr-gauge,
@@ -651,11 +674,7 @@ textarea {
 
 @media screen and (max-width: 1250px) {
     .top-navigation {
-        grid-template-columns: minmax(280px, 1fr) auto auto;
-    }
-
-    .navigation-tab {
-        min-width: 105px;
+        padding: 14px 20px;
     }
 
     .mpr-visual-grid {
@@ -675,13 +694,8 @@ textarea {
     }
 
     .top-navigation {
-        grid-template-columns: 1fr auto;
-        gap: 16px;
-    }
-
-    .navigation-tabs {
-        grid-column: 1 / -1;
-        grid-row: 2;
+        padding: 14px 18px;
+        gap: 14px;
     }
 
     .download-button {
@@ -708,24 +722,15 @@ textarea {
 
 @media screen and (max-width: 760px) {
     .top-navigation {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
         padding: 16px;
     }
 
     .brand-text h1 {
         font-size: 24px;
         white-space: normal;
-    }
-
-    .navigation-tabs {
-        grid-column: auto;
-        grid-row: auto;
-        width: 100%;
-    }
-
-    .navigation-tab {
-        flex: 1 1 50%;
-        min-width: 0;
     }
 
     .download-button {

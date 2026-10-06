@@ -47,8 +47,8 @@ XLSX_MAGIC = b"PK\x03\x04"
 # Default canonical filenames inside data/
 TARGET_FILENAMES = {
     "masterfile": "Masterfile_DMB_Dashboard.xlsx",
-    "functional_review": "Functional DMB Review Sheets-17th_sept.xlsx",
-    "strategic_execution": "Strategic Execution Dashboard-17Th_sept.xlsx",
+    "functional_review": "Functional DMB Review Sheets.xlsx",
+    "strategic_execution": "Strategic Execution Dashboard.xlsx",
 }
 
 
@@ -76,8 +76,8 @@ def load_config() -> dict:
         },
         "file_match_patterns": {
             "masterfile": ["*Masterfile*.xlsx", "*DMB-Mastersheet*.xlsx", "*Master*.xlsx"],
-            "functional_review": ["*17th*sept*.xlsx", "*17Th*sept*.xlsx", "*Functional DMB Review Sheets-17th_sept*.xlsx"],
-            "strategic_execution": ["*Strategic*17Th*sept*.xlsx", "*Strategic*17th*sept*.xlsx", "*Strategic*Execution*.xlsx", "*Strategic*.xlsx", "*AOP*Critical*.xlsx"],
+            "functional_review": ["*Functional*Review*.xlsx", "*Functional*DMB*.xlsx", "*Functional*.xlsx", "*17th*sept*.xlsx", "*17Th*sept*.xlsx"],
+            "strategic_execution": ["*Strategic*Execution*.xlsx", "*Strategic*.xlsx", "*AOP*Critical*.xlsx", "*Strategic*17Th*sept*.xlsx", "*Strategic*17th*sept*.xlsx"],
         },
     }
 
@@ -232,7 +232,14 @@ def validate_workbook_type(content: bytes, target_key: str) -> bool:
         return False
 
     if target_key == "masterfile":
-        return "MPR Masterfile" in sheets or "DMB Masterfile" in sheets
+        if "MPR Masterfile" not in sheets or "DMB Masterfile" not in sheets:
+            return False
+        try:
+            from scripts.sync_to_masterfile import validate_masterfile_content
+            is_valid, _, _, _ = validate_masterfile_content(content)
+            return is_valid
+        except Exception:
+            return "MPR Masterfile" in sheets and "DMB Masterfile" in sheets
     elif target_key == "functional_review":
         return any(
             "quality" in s.lower()

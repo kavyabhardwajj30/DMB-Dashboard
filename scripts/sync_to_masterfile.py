@@ -2,31 +2,34 @@
 DMB Masterfile Synchronizer & Consolidator (Python)
 ===================================================
 Synchronizes updated data from:
-  1. Functional DMB Review Sheets (e.g. Functional DMB Review Sheets-17th_sept.xlsx)
-  2. Strategic Execution Dashboard (e.g. Strategic Execution Dashboard-17Th_sept.xlsx)
+  1. Functional DMB Review Sheets (e.g. Functional DMB Review Sheets.xlsx / 17th_sept)
+  2. Strategic Execution Dashboard (e.g. Strategic Execution Dashboard.xlsx / 17Th_sept)
 into the canonical target:
-  -> Masterfile_DMB_Dashboard.xlsx (containing 'DMB Masterfile' & 'MPR Masterfile' sheets)
+  -> Masterfile_DMB_Dashboard.xlsx (containing full 'DMB Masterfile' & 'MPR Masterfile' sheets)
 
-Modes:
-  1. One-shot Execution:
-       python scripts/sync_to_masterfile.py
-  2. Live Watcher Daemon (Auto-sync on save):
-       python scripts/sync_to_masterfile.py --watch
+Key Features:
+- Consolidates all 10 function tabs from Functional DMB Review Sheets into all 9 DMB sections.
+- Preserves full 200+ row structure, 22 columns, formatting, and live monthly actuals/targets.
+- Strict validation: rejects any sync result with <180 DMB rows or <45 MPR rows to prevent data loss.
+- Atomic write with Windows file lock safety.
+- Supports one-shot execution and continuous watch daemon.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import ctypes
 import hashlib
 import io
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -45,6 +48,46 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 TARGET_MASTERFILE = DATA_DIR / "Masterfile_DMB_Dashboard.xlsx"
+
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+SHEET_MAP = [
+    ("1.Quality", "Quality DMB"),
+    ("2.Regulatory", "Regulatory"),
+    ("3.ISC ", "ISC & Procurement"),
+    ("4.Procurement", "ISC & Procurement"),
+    ("5.R&D ", "R&D"),
+    ("6. Marketing", "Marketing"),
+    ("7.Customer Service", "Customer Service"),
+    ("9.NAR ", "NAR"),
+    ("10.EUROPE ", "Europe"),
+    ("11.GROWTH ", "Growth"),
+]
+
+SECTION_ORDER = [
+    "Quality DMB",
+    "Regulatory",
+    "ISC & Procurement",
+    "R&D",
+    "Marketing",
+    "Customer Service",
+    "NAR",
+    "Europe",
+    "Growth",
+]
+
+
+def clean_text(val: Any) -> str:
+    if val is None:
+        return ""
+    s = str(val).replace("\xa0", " ").strip()
+    if s.lower() in {"none", "nan", "null"}:
+        return ""
+    return s
+
+
+def norm_key(s: Any) -> str:
+    return re.sub(r"[^a-zA-Z0-9]", "", str(s or "").lower())
 
 
 def read_file_safe_bytes(file_path: Path | str) -> bytes:
@@ -94,7 +137,7 @@ def read_file_safe_bytes(file_path: Path | str) -> bytes:
 
 def atomic_write_bytes(target_path: Path, content: bytes) -> bool:
     """Write bytes atomically to target path to prevent file corruption."""
-    temp_path = target_path.with_suffix(f".tmp.{os.getpid()}_{int(time.time()*1000)}")
+    temp_path = target_path.with_suffix(f".tmp.{os.getpid()}_{int(time.time()*1000)}.xlsx")
     try:
         temp_path.write_bytes(content)
         if target_path.exists():
@@ -123,9 +166,20 @@ def get_file_hash(path: Path) -> str:
         return ""
 
 
+def determine_data_type(unit: str, sample_val: Any = None) -> str:
+    u = clean_text(unit).lower()
+    if "%" in u or "percent" in u:
+        return "Percentage"
+    if any(k in u for k in ["mn", "k", "€", "$", "m €", "m€", "million"]):
+        return "Decimal"
+    if "no." in u or "number" in u or "count" in u or "unit" in u:
+        return "Whole Number"
+    return "Percentage" if "%" in str(sample_val or "") else "Whole Number"
+
+
 def find_source_files(search_dir: Path = DATA_DIR) -> Tuple[Optional[Path], Optional[Path]]:
     """Locate the most recent Functional DMB Review workbook and Strategic Execution workbook."""
-    candidates = [p for p in search_dir.glob("*.xlsx") if not p.name.startswith("~$")]
+    candidates = [p for p in search_dir.glob("*.xlsx") if not p.name.startswith("~$") and not p.name.startswith(".")]
 
     func_file = None
     strat_file = None
@@ -149,65 +203,132 @@ def find_source_files(search_dir: Path = DATA_DIR) -> Tuple[Optional[Path], Opti
     return func_file, strat_file
 
 
-from copy import copy
+def extract_functional_kpis(func_wb: openpyxl.Workbook) -> List[Dict[str, Any]]:
+    """Extract all KPI definitions and monthly actuals/targets from all 10 function tabs."""
+    all_kpis: List[Dict[str, Any]] = []
+
+    for src_name, sec_title in SHEET_MAP:
+        if src_name not in func_wb.sheetnames:
+            matched = [s for s in func_wb.sheetnames if norm_key(src_name) in norm_key(s) or norm_key(s) in norm_key(src_name)]
+            if not matched:
+                continue
+            src_sheet = func_wb[matched[0]]
+        else:
+            src_sheet = func_wb[src_name]
+
+        # Locate header row with months
+        h_row = 5
+        month_col_idx: Dict[int, int] = {}
+        for r in range(1, min(15, src_sheet.max_row + 1)):
+            for c in range(1, min(30, src_sheet.max_column + 1)):
+                val = clean_text(src_sheet.cell(r, c).value).lower()
+                for m_idx, m_name in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
+                    if val.startswith(m_name) and m_idx not in month_col_idx:
+                        month_col_idx[m_idx] = c
+            if len(month_col_idx) >= 6:
+                h_row = r
+                break
+
+        current_category = "Mandatory Outcome"
+        r = h_row + 1
+        while r <= src_sheet.max_row:
+            c1 = clean_text(src_sheet.cell(r, 1).value)
+            c8 = clean_text(src_sheet.cell(r, 8).value).title()
+
+            if "critical enabling" in c1.lower() or "leading kpi" in c1.lower():
+                current_category = "Critical Enabling/Leading"
+                r += 1
+                continue
+            if "mandatory" in c1.lower() and "kpi" in c1.lower() and c8 != "Target":
+                current_category = "Mandatory Outcome"
+                r += 1
+                continue
+            if any(stop in c1.lower() for stop in ["root cause", "action tracker", "paretos", "trends", "if the kpi"]):
+                break
+
+            if c8 == "Target" or (c1 and r + 1 <= src_sheet.max_row and clean_text(src_sheet.cell(r + 1, 8).value).title() == "Actual"):
+                kpi_name = c1
+                definition = clean_text(src_sheet.cell(r, 2).value)
+                operator = clean_text(src_sheet.cell(r, 3).value)
+                target_aop = src_sheet.cell(r, 4).value
+                units = clean_text(src_sheet.cell(r, 5).value)
+                metric_nature = clean_text(src_sheet.cell(r, 6).value)
+                frequency = clean_text(src_sheet.cell(r, 7).value)
+
+                t_months = [src_sheet.cell(r, month_col_idx.get(m_i, m_i + 9)).value for m_i in range(12)]
+                a_months = [None] * 12
+                if r + 1 <= src_sheet.max_row and clean_text(src_sheet.cell(r + 1, 8).value).title() == "Actual":
+                    a_months = [src_sheet.cell(r + 1, month_col_idx.get(m_i, m_i + 9)).value for m_i in range(12)]
+                    next_step = 2
+                else:
+                    next_step = 1
+
+                display_kpi_name = kpi_name
+                if "procurement" in src_name.lower() and "ctb" in kpi_name.lower():
+                    if "(procurement)" not in display_kpi_name.lower():
+                        display_kpi_name = f"{display_kpi_name} (Procurement)"
+                elif "isc" in src_name.lower() and "ctb" in kpi_name.lower():
+                    if "(isc)" not in display_kpi_name.lower():
+                        display_kpi_name = f"{display_kpi_name} (ISC)"
+
+                data_type = determine_data_type(units, target_aop)
+
+                all_kpis.append({
+                    "section": sec_title,
+                    "kpi_name": display_kpi_name,
+                    "definition": definition,
+                    "operator": operator,
+                    "target_aop": target_aop,
+                    "units": units,
+                    "metric_nature": metric_nature,
+                    "frequency": frequency,
+                    "target_months": t_months,
+                    "actual_months": a_months,
+                    "data_type": data_type,
+                    "category": current_category,
+                    "source_sheet": src_name,
+                })
+                r += next_step
+            else:
+                r += 1
+
+    return all_kpis
 
 
-def copy_sheet_content(src_ws: openpyxl.worksheet.worksheet.Worksheet, dst_ws: openpyxl.worksheet.worksheet.Worksheet):
-    """Copy all cell values, formulas, and exact styles (fonts, fills, borders, alignments, dimensions) from src_ws to dst_ws."""
-    for row in src_ws.iter_rows():
-        for cell in row:
-            dst_cell = dst_ws.cell(row=cell.row, column=cell.column, value=cell.value)
-            if cell.has_style:
-                try:
-                    if cell.font:
-                        dst_cell.font = copy(cell.font)
-                    if cell.fill:
-                        dst_cell.fill = copy(cell.fill)
-                    if cell.border:
-                        dst_cell.border = copy(cell.border)
-                    if cell.alignment:
-                        dst_cell.alignment = copy(cell.alignment)
-                    if cell.number_format:
-                        dst_cell.number_format = cell.number_format
-                    if cell.protection:
-                        dst_cell.protection = copy(cell.protection)
-                except Exception:
-                    pass
-
-    # Copy merged cells
-    for merged_cell in src_ws.merged_cells.ranges:
-        try:
-            dst_ws.merge_cells(str(merged_cell))
-        except Exception:
-            pass
-
-    # Copy row heights
-    for row_idx, row_dim in src_ws.row_dimensions.items():
-        if row_dim.height is not None:
-            dst_ws.row_dimensions[row_idx].height = row_dim.height
-
-    # Copy column widths
-    for col_letter, dim in src_ws.column_dimensions.items():
-        if dim.width is not None:
-            dst_ws.column_dimensions[col_letter].width = dim.width
-        if dim.hidden:
-            dst_ws.column_dimensions[col_letter].hidden = True
-
-    # Ensure grid lines are visible
+def validate_masterfile_content(content: bytes) -> Tuple[bool, str, int, int]:
+    """Validate that workbook content contains complete DMB and MPR Masterfile sheets."""
+    if not content or not content.startswith(b"PK\x03\x04"):
+        return False, "Not a valid Excel XLSX binary.", 0, 0
     try:
-        if dst_ws.views.sheetView:
-            dst_ws.views.sheetView[0].showGridLines = True
-    except Exception:
-        pass
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+        sheets = set(wb.sheetnames)
+        if "DMB Masterfile" not in sheets or "MPR Masterfile" not in sheets:
+            wb.close()
+            return False, f"Missing required sheets. Found: {sheets}", 0, 0
+
+        dmb_ws = wb["DMB Masterfile"]
+        mpr_ws = wb["MPR Masterfile"]
+        dmb_rows = dmb_ws.max_row or 0
+        mpr_rows = mpr_ws.max_row or 0
+        wb.close()
+
+        if dmb_rows < 180:
+            return False, f"DMB Masterfile row count too low ({dmb_rows} < 180). Possible truncation.", dmb_rows, mpr_rows
+        if mpr_rows < 45:
+            return False, f"MPR Masterfile row count too low ({mpr_rows} < 45). Possible truncation.", dmb_rows, mpr_rows
+
+        return True, "Valid complete Masterfile.", dmb_rows, mpr_rows
+    except Exception as e:
+        return False, f"Validation error: {e}", 0, 0
 
 
 def sync_masterfile(
     func_path: Optional[Path] = None,
     strat_path: Optional[Path] = None,
     target_path: Path = TARGET_MASTERFILE,
-) -> dict:
+) -> Dict[str, Any]:
     """
-    Syncs the Functional DMB Review file and Strategic Execution file into Masterfile_DMB_Dashboard.xlsx.
+    Consolidates Functional DMB Review sheets and Strategic Execution Dashboard into Masterfile_DMB_Dashboard.xlsx.
     """
     if func_path is None or strat_path is None:
         detected_func, detected_strat = find_source_files()
@@ -222,69 +343,186 @@ def sync_masterfile(
     logger.info("Reading Functional DMB Workbook: %s", func_path.name)
     logger.info("Reading Strategic Execution Workbook: %s", strat_path.name)
 
-    # 1. Load Functional Workbook
     func_bytes = read_file_safe_bytes(func_path)
-    func_wb = openpyxl.load_workbook(io.BytesIO(func_bytes), data_only=True)
-
-    # 2. Load Strategic Workbook
     strat_bytes = read_file_safe_bytes(strat_path)
-    strat_wb = openpyxl.load_workbook(io.BytesIO(strat_bytes), data_only=True)
 
-    # 3. Create or Load Master Workbook
-    out_wb = openpyxl.Workbook()
-    # Remove default sheet
-    default_sheet = out_wb.active
+    wb_func = openpyxl.load_workbook(io.BytesIO(func_bytes), data_only=True)
+    wb_strat = openpyxl.load_workbook(io.BytesIO(strat_bytes), data_only=True)
 
-    # --- Sync MPR Masterfile ---
+    # Load existing masterfile if valid template exists, otherwise create new
+    out_wb = None
+    if target_path.exists():
+        try:
+            m_bytes = read_file_safe_bytes(target_path)
+            cand_wb = openpyxl.load_workbook(io.BytesIO(m_bytes))
+            if "DMB Masterfile" in cand_wb.sheetnames and cand_wb["DMB Masterfile"].max_row >= 180:
+                out_wb = cand_wb
+        except Exception:
+            pass
+
+    if out_wb is None:
+        out_wb = openpyxl.Workbook()
+
+    # --- 1. Sync MPR Masterfile ---
     mpr_src_sheet = None
-    if "Mastersheet" in strat_wb.sheetnames:
-        mpr_src_sheet = strat_wb["Mastersheet"]
-    elif "MPR Masterfile" in strat_wb.sheetnames:
-        mpr_src_sheet = strat_wb["MPR Masterfile"]
-    elif "AOP Critical" in strat_wb.sheetnames:
-        mpr_src_sheet = strat_wb["AOP Critical"]
-    else:
-        mpr_src_sheet = strat_wb.active
+    if "Mastersheet" in wb_strat.sheetnames:
+        mpr_src_sheet = wb_strat["Mastersheet"]
+    elif "MPR Masterfile" in wb_strat.sheetnames:
+        mpr_src_sheet = wb_strat["MPR Masterfile"]
+    elif "AOP Critical" in wb_strat.sheetnames:
+        mpr_src_sheet = wb_strat["AOP Critical"]
 
-    mpr_dst_sheet = out_wb.create_sheet(title="MPR Masterfile")
+    if "MPR Masterfile" in out_wb.sheetnames:
+        mpr_dst_sheet = out_wb["MPR Masterfile"]
+    else:
+        mpr_dst_sheet = out_wb.create_sheet(title="MPR Masterfile", index=0)
+
     if mpr_src_sheet:
-        copy_sheet_content(mpr_src_sheet, mpr_dst_sheet)
-        logger.info("Synced 'MPR Masterfile' from '%s' (%d rows).", mpr_src_sheet.title, mpr_src_sheet.max_row)
+        for r_idx in range(1, mpr_src_sheet.max_row + 1):
+            for c_idx in range(1, mpr_src_sheet.max_column + 1):
+                src_cell = mpr_src_sheet.cell(r_idx, c_idx)
+                dst_cell = mpr_dst_sheet.cell(r_idx, c_idx)
+                dst_cell.value = src_cell.value
+                if src_cell.has_style:
+                    try:
+                        if src_cell.font:
+                            dst_cell.font = copy.copy(src_cell.font)
+                        if src_cell.fill:
+                            dst_cell.fill = copy.copy(src_cell.fill)
+                        if src_cell.border:
+                            dst_cell.border = copy.copy(src_cell.border)
+                        if src_cell.alignment:
+                            dst_cell.alignment = copy.copy(src_cell.alignment)
+                        if src_cell.number_format:
+                            dst_cell.number_format = src_cell.number_format
+                    except Exception:
+                        pass
 
-    # --- Sync DMB Masterfile ---
-    dmb_src_sheet = None
-    if "MasterSheet" in func_wb.sheetnames:
-        dmb_src_sheet = func_wb["MasterSheet"]
-    elif "Mastersheet" in func_wb.sheetnames:
-        dmb_src_sheet = func_wb["Mastersheet"]
-    elif "DMB Masterfile" in func_wb.sheetnames:
-        dmb_src_sheet = func_wb["DMB Masterfile"]
+    # --- 2. Sync DMB Masterfile ---
+    all_extracted_kpis = extract_functional_kpis(wb_func)
+
+    if "DMB Masterfile" in out_wb.sheetnames:
+        dmb_dst_sheet = out_wb["DMB Masterfile"]
     else:
-        dmb_src_sheet = func_wb.active
+        dmb_dst_sheet = out_wb.create_sheet(title="DMB Masterfile", index=1)
 
-    dmb_dst_sheet = out_wb.create_sheet(title="DMB Masterfile")
-    if dmb_src_sheet:
-        copy_sheet_content(dmb_src_sheet, dmb_dst_sheet)
-        logger.info("Synced 'DMB Masterfile' from '%s' (%d rows).", dmb_src_sheet.title, dmb_src_sheet.max_row)
+    if dmb_dst_sheet.max_row >= 180:
+        logger.info("Updating existing DMB Masterfile (%d rows) with latest function data...", dmb_dst_sheet.max_row)
+        current_section = ""
+        for r in range(1, dmb_dst_sheet.max_row + 1):
+            c0 = clean_text(dmb_dst_sheet.cell(r, 1).value)
+            c7 = clean_text(dmb_dst_sheet.cell(r, 8).value).title()
+            if not c7 and c0 and c0 != "KPI Name" and c0 != "Mastersheet":
+                current_section = c0
+                continue
 
-    # Remove the blank initial sheet
-    if default_sheet and default_sheet in out_wb.worksheets:
-        out_wb.remove(default_sheet)
+            if c7 in ["Target", "Actual"] and c0:
+                matched = [
+                    k for k in all_extracted_kpis
+                    if (k["section"] == current_section or norm_key(k["section"]) == norm_key(current_section))
+                    and (norm_key(k["kpi_name"]) == norm_key(c0) or norm_key(c0) in norm_key(k["kpi_name"]))
+                ]
+                if matched:
+                    src_kpi = matched[0]
+                    if src_kpi["definition"]:
+                        dmb_dst_sheet.cell(r, 2, src_kpi["definition"])
+                    if src_kpi["operator"]:
+                        dmb_dst_sheet.cell(r, 3, src_kpi["operator"])
+                    if src_kpi["target_aop"] is not None:
+                        dmb_dst_sheet.cell(r, 4, src_kpi["target_aop"])
+                    if src_kpi["units"]:
+                        dmb_dst_sheet.cell(r, 5, src_kpi["units"])
+                    if src_kpi["metric_nature"]:
+                        dmb_dst_sheet.cell(r, 6, src_kpi["metric_nature"])
+                    if src_kpi["frequency"]:
+                        dmb_dst_sheet.cell(r, 7, src_kpi["frequency"])
 
-    # Save to memory and write atomically
-    out_buf = io.BytesIO()
-    out_wb.save(out_buf)
-    content_bytes = out_buf.getvalue()
+                    m_vals = src_kpi["target_months"] if c7 == "Target" else src_kpi["actual_months"]
+                    for m_i in range(12):
+                        val = m_vals[m_i]
+                        if val is not None and str(val).strip() != "":
+                            dmb_dst_sheet.cell(r, m_i + 9, val)
+
+                    if src_kpi["data_type"]:
+                        dmb_dst_sheet.cell(r, 21, src_kpi["data_type"])
+                    if src_kpi["category"]:
+                        dmb_dst_sheet.cell(r, 22, src_kpi["category"])
+    else:
+        logger.info("Building full DMB Masterfile from %d extracted KPIs...", len(all_extracted_kpis))
+        dmb_dst_sheet.cell(1, 1, "Mastersheet")
+        cur_r = 3
+        for sec in SECTION_ORDER:
+            dmb_dst_sheet.cell(cur_r, 1, sec)
+            cur_r += 1
+
+            headers = [
+                "KPI Name", "KPI  Definition", "Operators", "Target AOP 2026", "Units",
+                "Metric nature", "Frequency", "Target/ Actual",
+                "Jan-2026", "Feb-2026", "Mar-2026", "Apr-2026", "May-2026", "Jun-2026",
+                "Jul-2026", "Aug-2026", "Sep-2026", "Oct-2026", "Nov-2026", "Dec-2026",
+                "Data Type", "KPI category",
+            ]
+            for col_i, h in enumerate(headers, 1):
+                dmb_dst_sheet.cell(cur_r, col_i, h)
+            cur_r += 1
+
+            sec_kpis = [k for k in all_extracted_kpis if k["section"] == sec]
+            for k in sec_kpis:
+                # Target row
+                dmb_dst_sheet.cell(cur_r, 1, k["kpi_name"])
+                dmb_dst_sheet.cell(cur_r, 2, k["definition"])
+                dmb_dst_sheet.cell(cur_r, 3, k["operator"])
+                dmb_dst_sheet.cell(cur_r, 4, k["target_aop"])
+                dmb_dst_sheet.cell(cur_r, 5, k["units"])
+                dmb_dst_sheet.cell(cur_r, 6, k["metric_nature"])
+                dmb_dst_sheet.cell(cur_r, 7, k["frequency"])
+                dmb_dst_sheet.cell(cur_r, 8, "Target")
+                for m_i in range(12):
+                    dmb_dst_sheet.cell(cur_r, m_i + 9, k["target_months"][m_i])
+                dmb_dst_sheet.cell(cur_r, 21, k["data_type"])
+                dmb_dst_sheet.cell(cur_r, 22, k["category"])
+                cur_r += 1
+
+                # Actual row
+                dmb_dst_sheet.cell(cur_r, 1, k["kpi_name"])
+                dmb_dst_sheet.cell(cur_r, 2, k["definition"])
+                dmb_dst_sheet.cell(cur_r, 3, k["operator"])
+                dmb_dst_sheet.cell(cur_r, 4, k["target_aop"])
+                dmb_dst_sheet.cell(cur_r, 5, k["units"])
+                dmb_dst_sheet.cell(cur_r, 6, k["metric_nature"])
+                dmb_dst_sheet.cell(cur_r, 7, k["frequency"])
+                dmb_dst_sheet.cell(cur_r, 8, "Actual")
+                for m_i in range(12):
+                    dmb_dst_sheet.cell(cur_r, m_i + 9, k["actual_months"][m_i])
+                dmb_dst_sheet.cell(cur_r, 21, k["data_type"])
+                dmb_dst_sheet.cell(cur_r, 22, k["category"])
+                cur_r += 1
+
+    # Clean up non-standard sheets
+    for s in list(out_wb.sheetnames):
+        if s not in ["MPR Masterfile", "DMB Masterfile"]:
+            out_wb.remove(out_wb[s])
+
+    buf = io.BytesIO()
+    out_wb.save(buf)
+    content_bytes = buf.getvalue()
+
+    # Strict Validation Safeguard
+    is_valid, err_msg, dmb_rows, mpr_rows = validate_masterfile_content(content_bytes)
+    if not is_valid:
+        logger.error("Masterfile validation failed: %s", err_msg)
+        return {"success": False, "message": f"Validation failed: {err_msg}"}
 
     success = atomic_write_bytes(target_path, content_bytes)
     if success:
-        logger.info("Successfully updated '%s' (%d bytes).", target_path.name, len(content_bytes))
+        logger.info("Successfully consolidated Masterfile (%d DMB rows, %d MPR rows, %d bytes).", dmb_rows, mpr_rows, len(content_bytes))
         return {
             "success": True,
             "target": str(target_path),
-            "func_rows": dmb_src_sheet.max_row if dmb_src_sheet else 0,
-            "mpr_rows": mpr_src_sheet.max_row if mpr_src_sheet else 0,
-            "message": f"Masterfile updated successfully with {dmb_src_sheet.max_row if dmb_src_sheet else 0} DMB rows and {mpr_src_sheet.max_row if mpr_src_sheet else 0} MPR rows.",
+            "dmb_rows": dmb_rows,
+            "mpr_rows": mpr_rows,
+            "bytes": len(content_bytes),
+            "message": f"Masterfile updated successfully with {dmb_rows} DMB rows and {mpr_rows} MPR rows.",
         }
     else:
         return {"success": False, "message": "Failed to write target masterfile."}
@@ -298,7 +536,6 @@ def watch_and_sync(interval_seconds: float = 3.0):
     logger.info("Starting Masterfile Live Watcher (checking every %.1f seconds)...", interval_seconds)
     last_hashes: Dict[str, str] = {}
 
-    # Initial sync
     try:
         res = sync_masterfile()
         logger.info("Initial sync status: %s", res.get("message"))

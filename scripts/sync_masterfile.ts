@@ -192,6 +192,8 @@ interface SourceRow {
   jul: Cell; aug: Cell; sep: Cell; oct: Cell; nov: Cell; dec: Cell;
   dataType?: string;
   category?: string;
+  target2026Format?: string;     // number format of target2026 in the source
+  formats?: string[];            // number formats of Jan..Dec in the source
 }
 
 /** One source KPI with its Target and Actual values. */
@@ -213,6 +215,10 @@ interface Entry {
   category: string;
   targetValues: Cell[];
   actualValues: Cell[];
+  /** Source number formats, so the Masterfile shows each value as the source does; "" = keep. */
+  target2026Format: string;
+  targetFormats: string[];
+  actualFormats: string[];
 }
 
 interface MasterKpi {
@@ -234,6 +240,7 @@ interface MasterSection {
 
 interface Master {
   values: Cell[][];
+  formats: string[][];
   sections: MasterSection[];
 }
 
@@ -402,17 +409,23 @@ function buildEntries(layout: Layout, rows: SourceRow[]): Entry[] {
         dataType: cleanText(row.dataType) || dataTypeForUnit(unit),
         category: cleanText(row.category),
         targetValues: emptyMonths(),
-        actualValues: emptyMonths()
+        actualValues: emptyMonths(),
+        target2026Format: cleanText(row.target2026Format),
+        targetFormats: emptyFormats(),
+        actualFormats: emptyFormats()
       };
       entries.push(index[key]);
     }
     const months = [row.jan, row.feb, row.mar, row.apr, row.may, row.jun,
                     row.jul, row.aug, row.sep, row.oct, row.nov, row.dec].map(v => tidy(v));
+    const formats = emptyFormats().map((blank, m) => cleanText((row.formats || [])[m]));
     if (isTarget) {
       index[key].targetValues = months;
+      index[key].targetFormats = formats;
       hasTarget.push(index[key]);
     } else {
       index[key].actualValues = months;
+      index[key].actualFormats = formats;
     }
   }
 
@@ -478,6 +491,57 @@ function rowValues(layout: Layout, entry: Entry, isTarget: boolean): Cell[] {
   ] as Cell[]).concat(months).concat([entry.dataType]);
 }
 
+/** Source number formats of the cells of rowValues(); "" = leave the cell's format alone. */
+function rowFormats(layout: Layout, entry: Entry, isTarget: boolean): string[] {
+  const formats: string[] = [];
+  for (let c = 0; c < layout.columnCount; c++) formats.push("");
+  formats[3] = entry.target2026Format;            // D: Target AOP 2026 / AOP 2026
+  const months = isTarget ? entry.targetFormats : entry.actualFormats;
+  for (let m = 0; m < 12; m++) formats[layout.firstMonthColumn + m] = months[m];
+  return formats;
+}
+
+/**
+ * A KPI with Unit "%" and Data Type "Percentage". Not "Production units"
+ * (Percentage but "No.") and not NPI On-Time (% kept as Whole Number 90).
+ */
+function isPercentKpi(unit: string, dataType: string): boolean {
+  return cleanText(unit) === "%" && normalise(dataType) === "percentage";
+}
+
+/**
+ * Plain numbers of a percentage KPI get their % sign: 58.4 -> 0.584 shown as
+ * 58.4%, 91 -> 91%, 0.91 -> 91%. Values already shown as % are left alone.
+ * Changes the Target AOP 2026 and Jan..Dec cells of `values` / `formats`.
+ */
+function showAsPercent(layout: Layout, values: Cell[], formats: string[]): void {
+  const columns = [3];
+  for (let m = 0; m < 12; m++) columns.push(layout.firstMonthColumn + m);
+  for (const c of columns) {
+    const value = values[c];
+    if (typeof value !== "number" || !isFinite(value) || isPercentFormat(formats[c] || "")) continue;
+    const shown = Math.abs(value) > 1 ? value : value * 100;
+    values[c] = Number((shown / 100).toPrecision(12));
+    formats[c] = percentFormatFor(shown);
+  }
+}
+
+/** "0%", "0.0%" or "0.00%": as many decimals as 58.4 / 91 / 49.25 need. */
+function percentFormatFor(shown: number): string {
+  for (let places = 0; places < 2; places++) {
+    const factor = Math.pow(10, places);
+    if (Math.abs(shown * factor - Math.round(shown * factor)) < 0.000001) {
+      return places === 0 ? "0%" : "0.0%";
+    }
+  }
+  return "0.00%";
+}
+
+/** True for 0% / 0.00% formats; a quoted or escaped "%" is only a literal sign. */
+function isPercentFormat(format: string): boolean {
+  return format.replace(/"[^"]*"/g, "").replace(/\\./g, "").indexOf("%") >= 0;
+}
+
 /**
  * The Masterfile name of a strategic imperative as written in 'AOP Critical',
  * e.g. "Cusotomer Focus" -> "Customer Focus",
@@ -516,9 +580,11 @@ function knownGroups(layout: Layout, entries: Entry[]): string[] {
 
 function readMaster(layout: Layout, sheet: ExcelScript.Worksheet): Master {
   const used = sheet.getUsedRange(true);
-  if (!used) return { values: [], sections: [] };
+  if (!used) return { values: [], formats: [], sections: [] };
   const rowCount = used.getRowIndex() + used.getRowCount();
-  const values = sheet.getRangeByIndexes(0, 0, rowCount, layout.columnCount).getValues() as Cell[][];
+  const range = sheet.getRangeByIndexes(0, 0, rowCount, layout.columnCount);
+  const values = range.getValues() as Cell[][];
+  const formats = range.getNumberFormats() as string[][];
 
   const sections: MasterSection[] = [];
   let current: MasterSection | null = null;
@@ -567,7 +633,7 @@ function readMaster(layout: Layout, sheet: ExcelScript.Worksheet): Master {
     current.lastRow = r;
   }
 
-  return { values: values, sections: sections };
+  return { values: values, formats: formats, sections: sections };
 }
 
 // =====================================================================
@@ -657,7 +723,9 @@ function updateChangedCells(
     for (const pair of pairs) {
       if (pair.row < 0) continue;
       const current = master.values[pair.row];
+      const currentFormats = master.formats[pair.row] || [];
       const wanted = rowValues(layout, entry, pair.isTarget);
+      const wantedFormats = rowFormats(layout, entry, pair.isTarget);
 
       // Keep the Masterfile name unless the KPI was really renamed in the source.
       const currentName = cleanText(current[layout.nameColumn]);
@@ -665,18 +733,36 @@ function updateChangedCells(
         compact(stripGroupSuffix(currentName, groups)) === compact(entry.kpiName);
       // Data Type is maintained in the Masterfile; follow the source only when the unit changes.
       const unitChanged = !sameValue(current[layout.unitColumn], entry.unit);
+      const dataType = unitChanged ? entry.dataType : (cleanText(current[layout.dataTypeColumn]) || entry.dataType);
+      if (isPercentKpi(entry.unit, dataType)) showAsPercent(layout, wanted, wantedFormats);
 
       for (let c = 0; c < layout.columnCount; c++) {
         if (c === layout.rowTypeColumn) continue;
         if (c === layout.nameColumn && keepName) continue;
         if (c === layout.dataTypeColumn && !unitChanged) continue;
-        if (sameValue(current[c], wanted[c])) continue;
 
-        log(report, `UPDATE [${match.section.title}] ${entry.displayName} ` +
+        // Show the value as the source does (100% not 1); a % KPI shows 58.4 as 58.4%.
+        const format = wantedFormats[c];
+        const fixFormat = format !== "" && format !== (currentFormats[c] || "");
+        const where = `[${match.section.title}] ${entry.displayName} ` +
           `${pair.isTarget ? "Target" : "Actual"} ${layout.headers[c].replace(/\n/g, " ")} ` +
-          `(${address(pair.row, c)}): '${cleanText(current[c])}' -> '${cleanText(wanted[c])}'`);
+          `(${address(pair.row, c)})`;
+
+        if (sameValue(current[c], wanted[c])) {
+          if (!fixFormat) continue;
+          log(report, `FORMAT ${where}: '${cleanText(current[c])}' format '${currentFormats[c] || ""}' -> '${format}'`);
+          report.cellsUpdated++;
+          if (!dryRun) sheet.getCell(pair.row, c).setNumberFormat(format);
+          continue;
+        }
+
+        log(report, `UPDATE ${where}: '${cleanText(current[c])}' -> '${cleanText(wanted[c])}'`);
         report.cellsUpdated++;
-        if (!dryRun) sheet.getCell(pair.row, c).setValue(wanted[c]);
+        if (!dryRun) {
+          const cell = sheet.getCell(pair.row, c);
+          if (fixFormat) cell.setNumberFormat(format);
+          cell.setValue(wanted[c]);
+        }
       }
     }
   }
@@ -811,10 +897,10 @@ function styleSource(
 ): { targetRow: number; actualRow: number } {
   const complete = (k: MasterKpi): boolean => k.targetRow >= 0 && k.actualRow >= 0;
   let kpi: MasterKpi | undefined = anchor && complete(anchor.kpi) ? anchor.kpi : undefined;
-  if (!kpi) kpi = section.kpis.find(complete);
+  if (!kpi) kpi = section.kpis.find(k => complete(k));
   if (!kpi) {
     for (const other of master.sections) {
-      kpi = other.kpis.find(complete);
+      kpi = other.kpis.find(k => complete(k));
       if (kpi) break;
     }
   }
@@ -840,11 +926,24 @@ function writeKpiRows(
 
   const target = rowValues(layout, entry, true);
   const actual = rowValues(layout, entry, false);
+  const targetFormats = rowFormats(layout, entry, true);
+  const actualFormats = rowFormats(layout, entry, false);
+  if (isPercentKpi(entry.unit, entry.dataType)) {
+    showAsPercent(layout, target, targetFormats);
+    showAsPercent(layout, actual, actualFormats);
+  }
   sheet.getRangeByIndexes(row, 0, 2, layout.columnCount).setValues([target, actual]);
   sheet.getRangeByIndexes(row, layout.firstMonthColumn, 1, 12)
     .setNumberFormat(numberFormatFor(entry.targetValues, entry.unit));
   sheet.getRangeByIndexes(row + 1, layout.firstMonthColumn, 1, 12)
     .setNumberFormat(numberFormatFor(entry.actualValues, entry.unit));
+
+  // Cells whose format is known are shown as in the source (or with their % sign).
+  [targetFormats, actualFormats].forEach((formats, i) => {
+    for (let c = 0; c < layout.columnCount; c++) {
+      if (formats[c]) sheet.getCell(row + i, c).setNumberFormat(formats[c]);
+    }
+  });
 }
 
 // =====================================================================
@@ -1007,6 +1106,10 @@ function emptyMonths(): Cell[] {
   return ["", "", "", "", "", "", "", "", "", "", "", ""];
 }
 
+function emptyFormats(): string[] {
+  return ["", "", "", "", "", "", "", "", "", "", "", ""];
+}
+
 function dataTypeForUnit(unit: string): string {
   const lower = unit.toLowerCase();
   if (lower === "%") return "Percentage";
@@ -1029,6 +1132,7 @@ function stripGroupSuffix(name: string, groups: string[]): string {
 /**
  * Number format for the month cells of a new row, as in the Masterfile:
  * 0% / 0.0% / 0.00% for percentages, 0 / 0.0 / 0.00 for other numbers.
+ * Only a fallback: cells whose source format is known get that format.
  */
 function numberFormatFor(values: Cell[], unit: string): string {
   const isPercent = cleanText(unit) === "%";
