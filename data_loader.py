@@ -7,7 +7,7 @@ import openpyxl
 
 BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = BASE_DIR / "data" / "Masterfile_DMB_Dashboard.xlsx"
-STRATEGIC_EXCEL_PATH = BASE_DIR / "data" / "Strategic Execution Dashboard-17Th_sept.xlsx"
+STRATEGIC_EXCEL_PATH = BASE_DIR / "data" / "Strategic Execution Dashboard.xlsx"
 
 
 import os
@@ -586,30 +586,32 @@ def load_dmb_data(excel_path=EXCEL_PATH):
     )
 
 
-FUNCTIONAL_REVIEW_PATH = BASE_DIR / "data" / "Functional DMB Review Sheets-17th_sept.xlsx"
+FUNCTIONAL_REVIEW_PATH = BASE_DIR / "data" / "Functional DMB Review Sheets.xlsx"
 
 
 def load_red_kpis_rca(file_path=None):
     """
-    Parses Functional DMB Review Sheets-17th_sept.xlsx (or configured file) for Red KPIs RCA
+    Parses Functional DMB Review Sheets (or configured file) for Red KPIs RCA
     and corrective action tracker entries.
     """
     if file_path is None:
-        file_path = FUNCTIONAL_REVIEW_PATH
+        if FUNCTIONAL_REVIEW_PATH.exists():
+            file_path = FUNCTIONAL_REVIEW_PATH
+        else:
+            data_dir = BASE_DIR / "data"
+            matching = [
+                p for p in data_dir.glob("*.xlsx")
+                if not p.name.startswith("~$") and not p.name.startswith(".")
+                and ("functional" in p.name.lower() or "review" in p.name.lower())
+                and "master" not in p.name.lower()
+            ]
+            if matching:
+                file_path = max(matching, key=lambda p: p.stat().st_mtime)
+            else:
+                file_path = FUNCTIONAL_REVIEW_PATH
     file_path = Path(file_path)
     if not file_path.exists():
-        data_dir = file_path.parent
-        matching = (
-            list(data_dir.glob("*17th*sept*.xlsx"))
-            or list(data_dir.glob("*17Th*sept*.xlsx"))
-            or list(data_dir.glob("*Functional*Review*.xlsx"))
-            or list(data_dir.glob("*Review*.xlsx"))
-            or list(data_dir.glob("*Strategic*Execution*.xlsx"))
-        )
-        if matching:
-            file_path = matching[0]
-        else:
-            return []
+        return []
 
     try:
         file_bytes = read_file_safe_bytes(file_path)
@@ -891,10 +893,36 @@ def find_masterfile(data_dir=None):
 
     preferred_file = data_dir / "Masterfile_DMB_Dashboard.xlsx"
 
+    # Check if preferred file exists and is complete (>= 180 rows in DMB Masterfile)
+    if preferred_file.exists():
+        try:
+            from scripts.sync_to_masterfile import validate_masterfile_content
+            is_valid, _, dmb_r, _ = validate_masterfile_content(read_file_safe_bytes(preferred_file))
+            if is_valid:
+                return preferred_file
+            else:
+                # Truncated or invalid -> auto rebuild from live functional & strategic workbooks
+                from scripts.sync_to_masterfile import sync_masterfile
+                sync_res = sync_masterfile()
+                if sync_res.get("success"):
+                    return preferred_file
+        except Exception:
+            pass
+
+    # If preferred file doesn't exist, trigger auto-sync from live review workbooks
+    if not preferred_file.exists():
+        try:
+            from scripts.sync_to_masterfile import sync_masterfile
+            sync_res = sync_masterfile()
+            if sync_res.get("success"):
+                return preferred_file
+        except Exception:
+            pass
+
     candidates = sorted(
         file_path
         for file_path in data_dir.glob("*.xlsx")
-        if not file_path.name.startswith("~$")
+        if not file_path.name.startswith("~$") and not file_path.name.startswith(".")
     )
 
     if preferred_file.exists():
