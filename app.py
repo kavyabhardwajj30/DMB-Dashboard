@@ -179,9 +179,9 @@ rca_actions = get_active_rca_actions()
 ACTION_STATUS_LABELS = {
     1: "Action not assigned",
     2: "Action assigned",
-    3: "Action in progress",
-    4: "Action completed",
-    5: "Resolution confirmed",
+    3: "Action started",
+    4: "Action in progress",
+    5: "Action completed",
 }
 
 
@@ -501,6 +501,19 @@ def format_due_date(value):
     return text_value
 
 
+UNICODE_STATUS_MAP = {
+    "⚪": "Action not assigned",
+    "○": "Action not assigned",
+    "◔": "Action assigned",
+    "◑": "Action started",
+    "◐": "Action started",
+    "◕": "Action in progress",
+    "●": "Action completed",
+    "✔": "Action completed",
+    "✓": "Action completed",
+}
+
+
 def format_action_status(value):
     if value is None or pd.isna(value):
         return "Action not assigned"
@@ -514,33 +527,36 @@ def format_action_status(value):
         )
 
     text = clean_cell_text(value)
+    if text in UNICODE_STATUS_MAP:
+        return UNICODE_STATUS_MAP[text]
+
     t_lower = text.lower()
-    if "not assigned" in t_lower:
+    if "not assigned" in t_lower or "unassigned" in t_lower or "⚪" in text or "○" in text:
         return "Action not assigned"
-    if "assigned" in t_lower:
+    if "assigned" in t_lower or "quarter" in t_lower or "◔" in text:
         return "Action assigned"
-    if "in progress" in t_lower or "inprogress" in t_lower or "started" in t_lower or "ongoing" in t_lower:
+    if "in progress" in t_lower or "inprogress" in t_lower or "3/4" in t_lower or "three quarter" in t_lower or "◕" in text:
         return "Action in progress"
-    if "completed" in t_lower or "closed" in t_lower:
+    if "started" in t_lower or "half" in t_lower or "1/2" in t_lower or "ongoing" in t_lower or "◑" in text or "◐" in text:
+        return "Action started"
+    if "completed" in t_lower or "closed" in t_lower or "confirmed" in t_lower or "resolution" in t_lower or "full" in t_lower or "●" in text:
         return "Action completed"
-    if "confirmed" in t_lower or "resolution" in t_lower:
-        return "Resolution confirmed"
 
     return text or "Action not assigned"
 
 
 def action_status_class(status):
     s = str(status).strip().lower()
-    if "not assigned" in s:
+    if "not assigned" in s or "unassigned" in s or s in {"1", "1.0", "⚪", "○"}:
         return "action-status-not-assigned"
-    if "assigned" in s:
+    if "assigned" in s or s in {"2", "2.0", "◔"}:
         return "action-status-assigned"
-    if "in progress" in s or "inprogress" in s or "started" in s or "ongoing" in s:
+    if "in progress" in s or "inprogress" in s or s in {"4", "4.0", "◕"} or "three quarter" in s:
         return "action-status-in-progress"
-    if "completed" in s or "closed" in s:
+    if "started" in s or "ongoing" in s or s in {"3", "3.0", "◑", "◐"} or "half" in s:
+        return "action-status-started"
+    if "completed" in s or "closed" in s or "confirmed" in s or "resolution" in s or s in {"5", "5.0", "●"}:
         return "action-status-completed"
-    if "confirmed" in s:
-        return "action-status-confirmed"
     return "action-status-unknown"
 
 
@@ -1808,12 +1824,12 @@ def is_closed_action_status(status_val):
     if not status_val or pd.isna(status_val):
         return False
     s = str(status_val).strip().lower()
-    return s in {
-        "action completed",
-        "resolution confirmed",
-        "completed",
-        "confirmed",
-    }
+    return (
+        s in {"5", "5.0", "●", "✔", "✓", "action completed", "completed", "closed", "resolution confirmed", "confirmed"}
+        or "completed" in s
+        or "confirmed" in s
+        or "closed" in s
+    )
 
 
 def format_impact_badge(impact_val):

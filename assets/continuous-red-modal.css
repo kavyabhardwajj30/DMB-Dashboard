@@ -645,11 +645,15 @@
     color: #a66b00;
 }
 
-.action-status-started,
+.action-status-started {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
 .action-status-in-progress,
 .action-status-inprogress {
-    background: #dceefa;
-    color: #0877b9;
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .action-status-completed {
