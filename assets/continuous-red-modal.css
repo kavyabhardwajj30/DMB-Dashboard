@@ -645,7 +645,9 @@
     color: #a66b00;
 }
 
-.action-status-started {
+.action-status-started,
+.action-status-in-progress,
+.action-status-inprogress {
     background: #dceefa;
     color: #0877b9;
 }

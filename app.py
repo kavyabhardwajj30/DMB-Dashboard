@@ -179,7 +179,7 @@ rca_actions = get_active_rca_actions()
 ACTION_STATUS_LABELS = {
     1: "Action not assigned",
     2: "Action assigned",
-    3: "Action started",
+    3: "Action in progress",
     4: "Action completed",
     5: "Resolution confirmed",
 }
@@ -536,7 +536,7 @@ def action_status_class(status):
     if "assigned" in s:
         return "action-status-assigned"
     if "in progress" in s or "inprogress" in s or "started" in s or "ongoing" in s:
-        return "action-status-started"
+        return "action-status-in-progress"
     if "completed" in s or "closed" in s:
         return "action-status-completed"
     if "confirmed" in s:
