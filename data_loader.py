@@ -146,21 +146,17 @@ CRISP_RCA_MAP = {
 def get_crisp_rca_text(kpi_name, text, text_type="cause"):
     if not text:
         return ""
-    text_str = str(text).strip()
-    if not text_str or text_str.lower() in {"—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a", "no rca", "no rca provided", "no corrective actions provided", "no action", "no actions", "no actions provided"}:
+    text_str = clean_text(text)
+    if not text_str or text_str.lower() in {
+        "—", "-", "–", "none", "nan", "null", "not entered", "na", "n/a",
+        "no rca", "no rca provided", "no corrective actions provided",
+        "no action", "no actions", "no actions provided",
+        "if reported red then state cause", "if reported red then\nstate cause",
+        "state action/s to cause", "state action/s to cause\n",
+    }:
         return ""
-    
-    k_name = str(kpi_name).strip()
-    t_type = text_type.lower().strip()
-    
-    if (k_name, t_type) in CRISP_RCA_MAP:
-        return CRISP_RCA_MAP[(k_name, t_type)]
-    
-    base_name = re.sub(r"\s*\((EQ|CS)\)", "", k_name).strip()
-    if (base_name, t_type) in CRISP_RCA_MAP:
-        return CRISP_RCA_MAP[(base_name, t_type)]
-        
-    return clean_text(text)
+    return text_str
+
 
 
 
@@ -768,6 +764,15 @@ def load_strategic_rca_actions(excel_path=None):
                 month_cols[pd.Timestamp(year=2026, month=m_idx, day=1)] = c
                 break
 
+    cause_col_idx = 23
+    action_col_idx = 24
+    for c in range(len(header_row)):
+        val = str(header_row[c]).strip().lower()
+        if "cause" in val and "action" not in val:
+            cause_col_idx = c
+        elif "action" in val:
+            action_col_idx = c
+
     def is_target_row(row_index):
         return str(df.iloc[row_index, 10] if df.shape[1] > 10 else "").strip().upper() == "T"
 
@@ -828,14 +833,14 @@ def load_strategic_rca_actions(excel_path=None):
             lower_is_better = "lower" in nature
             higher_is_better = not lower_is_better
 
-            cause = clean_text(df.iloc[r, 23] if df.shape[1] > 23 else "")
-            action = clean_text(df.iloc[r, 24] if df.shape[1] > 24 else "")
+            cause = clean_text(df.iloc[r, cause_col_idx] if df.shape[1] > cause_col_idx else "")
+            action = clean_text(df.iloc[r, action_col_idx] if df.shape[1] > action_col_idx else "")
 
             a_row = None
             if r + 1 < len(df) and str(df.iloc[r + 1, 10] if df.shape[1] > 10 else "").strip().upper() == "A":
                 a_row = df.iloc[r + 1]
-                a_cause = clean_text(df.iloc[r + 1, 23] if df.shape[1] > 23 else "")
-                a_action = clean_text(df.iloc[r + 1, 24] if df.shape[1] > 24 else "")
+                a_cause = clean_text(df.iloc[r + 1, cause_col_idx] if df.shape[1] > cause_col_idx else "")
+                a_action = clean_text(df.iloc[r + 1, action_col_idx] if df.shape[1] > action_col_idx else "")
                 if not cause and a_cause:
                     cause = a_cause
                 if not action and a_action:

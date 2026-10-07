@@ -172,6 +172,7 @@ def push_to_github_if_configured(filename: str, content: bytes) -> bool:
     repo = get_configured_github_repo()
     if not token:
         logger.debug("GITHUB_TOKEN not configured; skipping automatic GitHub commit.")
+        return False
     # If pushing masterfile, ensure it is complete and valid
     if "masterfile" in filename.lower():
         try:
@@ -236,24 +237,83 @@ def push_to_github_if_configured(filename: str, content: bytes) -> bool:
     return False
 
 
+def load_mailbox_config() -> dict:
+    """Load mailbox IMAP settings from env vars, sharepoint_config.json, or .env."""
+    cfg = {
+        "host": _env("IMAP_HOST", "imap.gmail.com"),
+        "port": int(_env("IMAP_PORT", "993")),
+        "user": _env("IMAP_USER", "dmbdashboard30@gmail.com"),
+        "password": _env("IMAP_PASSWORD", ""),
+        "folder": _env("IMAP_FOLDER", "INBOX"),
+        "allowed_senders": _env("SYNC_ALLOWED_SENDER", "*"),
+    }
+
+    # Check sharepoint_config.json
+    config_file = BASE_DIR / "sharepoint_config.json"
+    if config_file.exists():
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                mb = data.get("mailbox", {})
+                if mb.get("imap_host"):
+                    cfg["host"] = str(mb["imap_host"]).strip()
+                if mb.get("imap_port"):
+                    cfg["port"] = int(mb["imap_port"])
+                if mb.get("imap_user"):
+                    cfg["user"] = str(mb["imap_user"]).strip()
+                if mb.get("imap_password"):
+                    cfg["password"] = str(mb["imap_password"]).strip()
+                if mb.get("imap_folder"):
+                    cfg["folder"] = str(mb["imap_folder"]).strip()
+                if mb.get("allowed_senders"):
+                    cfg["allowed_senders"] = str(mb["allowed_senders"]).strip()
+        except Exception as e:
+            logger.debug("sharepoint_config.json mailbox read notice: %s", e)
+
+    # Check .env file
+    env_file = BASE_DIR / ".env"
+    if env_file.exists():
+        try:
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k == "IMAP_PASSWORD" and v:
+                    cfg["password"] = v
+                elif k == "IMAP_USER" and v:
+                    cfg["user"] = v
+                elif k == "IMAP_HOST" and v:
+                    cfg["host"] = v
+                elif k == "IMAP_PORT" and v:
+                    cfg["port"] = int(v)
+        except Exception:
+            pass
+
+    return cfg
+
+
 def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int, List[str]]:
     """
-    Polls the mailbox (dmbdashboard@gmail.com) over IMAP SSL and updates data/ workbooks.
+    Polls the mailbox over IMAP SSL and updates data/ workbooks directly.
     Scans from NEWEST to OLDEST so newest updates take precedence while retaining
     all historical emails in the mailbox.
 
     Returns:
         (updated_count, list_of_updated_filenames)
     """
-    host = _env("IMAP_HOST", "imap.gmail.com")
-    user = _env("IMAP_USER", "dmbdashboard30@gmail.com")
-    password = _env("IMAP_PASSWORD")
+    cfg = load_mailbox_config()
+    host = cfg["host"]
+    user = cfg["user"]
+    password = cfg["password"]
 
     if not password:
         logger.debug("IMAP_PASSWORD not configured; skipping mailbox sync.")
         return 0, []
 
-    allowed_raw = _env("SYNC_ALLOWED_SENDER")
+    allowed_raw = cfg["allowed_senders"]
     allowed = {a.strip().lower() for a in allowed_raw.split(",") if a.strip()}
     if not allowed:
         allowed = {"*"}
@@ -264,25 +324,35 @@ def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int,
     needed_workbooks = set(TARGET_FILENAMES.values())
 
     try:
-        port = int(_env("IMAP_PORT", "993"))
-        with imaplib.IMAP4_SSL(host, port, timeout=25) as imap:
+        port = cfg["port"]
+        with imaplib.IMAP4_SSL(host, port, timeout=5) as imap:
             clean_password = password.replace(" ", "") if "gmail.com" in host.lower() else password
             imap.login(user, clean_password)
-            imap.select(_env("IMAP_FOLDER", "INBOX"))
+            imap.select(cfg["folder"])
+
+
 
             seen_ids = set()
             ordered_ids = []
 
-            # Direct fast search
-            try:
-                status, data = imap.search(None, "ALL")
-                if status == "OK" and data and data[0]:
-                    for msg_id in data[0].split():
-                        if msg_id not in seen_ids:
-                            seen_ids.add(msg_id)
-                            ordered_ids.append(msg_id)
-            except Exception:
-                pass
+            # Fast targeted search by subjects first, fallback to recent
+            search_queries = [
+                '(OR (OR SUBJECT "SharePoint" SUBJECT "DMB") (OR SUBJECT "Strategic" SUBJECT "Functional"))',
+                'UNSEEN',
+                'ALL',
+            ]
+            for query in search_queries:
+                try:
+                    status, data = imap.search(None, query)
+                    if status == "OK" and data and data[0]:
+                        for msg_id in data[0].split():
+                            if msg_id not in seen_ids:
+                                seen_ids.add(msg_id)
+                                ordered_ids.append(msg_id)
+                        if ordered_ids:
+                            break
+                except Exception:
+                    pass
 
             if not ordered_ids:
                 return 0, []
@@ -290,16 +360,32 @@ def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int,
             # Sort message IDs numerically (higher ID = newer email)
             ordered_ids.sort(key=lambda x: int(x) if x.isdigit() else 0)
 
-            # Process messages from NEWEST to OLDEST (up to 150 most recent emails)
-            recent_ids = list(reversed(ordered_ids))[:150]
+            # Process only the most recent relevant emails (up to 15 emails instead of 150)
+            recent_ids = list(reversed(ordered_ids))[:15]
 
             for num in recent_ids:
                 try:
+                    # Quick header check first
+                    status, h_data = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])")
+                    if status == "OK" and h_data and h_data[0] and isinstance(h_data[0], tuple):
+                        h_msg = email.message_from_bytes(h_data[0][1])
+                        sender = email.utils.parseaddr(h_msg.get("From", ""))[1].lower()
+                        subj = _decode(h_msg.get("Subject", "")).lower()
+                        
+                        # Check sender allowed
+                        if "*" not in allowed:
+                            is_allowed = any(
+                                (item.startswith("@") and sender.endswith(item)) or (sender == item)
+                                for item in allowed
+                            )
+                            if not is_allowed:
+                                continue
+
                     status, raw = imap.fetch(num, "(RFC822)")
                 except Exception:
                     continue
 
-                if status != "OK" or not raw or not raw[0]:
+                if status != "OK" or not raw or not raw[0] or not isinstance(raw[0], tuple):
                     continue
 
                 msg = email.message_from_bytes(raw[0][1])

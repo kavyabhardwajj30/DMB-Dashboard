@@ -2,12 +2,22 @@
   "sync_enabled": true,
   "poll_interval_seconds": 20,
   "sync_mode": "auto",
+  "mailbox": {
+    "imap_host": "imap.gmail.com",
+    "imap_port": 993,
+    "imap_user": "dmbdashboard30@gmail.com",
+    "imap_password": "",
+    "imap_folder": "INBOX",
+
+    "allowed_senders": "*"
+  },
   "local_synced_folder": "C:/Users/320320898/OneDrive - Philips",
   "sharepoint_urls": {
     "masterfile": "",
     "functional_review": "",
     "strategic_execution": ""
   },
+
   "auth": {
     "tenant_id": "",
     "client_id": "",

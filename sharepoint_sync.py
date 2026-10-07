@@ -335,7 +335,16 @@ class SharePointSyncManager:
             search_dirs.append(Path(folder_str))
 
         home = Path.home()
-        for candidate in [home / "OneDrive - Philips", home / "Philips", home / "OneDrive"]:
+        for candidate in [
+            home / "OneDrive - Philips",
+            home / "Philips",
+            home / "OneDrive",
+            home / "Downloads",
+            home / "Desktop",
+            Path("C:/Users/320320898/OneDrive - Philips"),
+            Path("C:/Users/320320898/Downloads"),
+            Path("C:/Users/320320898/Desktop"),
+        ]:
             if candidate.exists() and candidate not in search_dirs:
                 search_dirs.append(candidate)
 
