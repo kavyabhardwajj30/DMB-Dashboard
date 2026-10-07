@@ -1,4 +1,6 @@
 import os
+import json
+import time
 from pathlib import Path
 from datetime import date, datetime
 from io import BytesIO
@@ -178,8 +180,8 @@ ACTION_STATUS_LABELS = {
     1: "Action not assigned",
     2: "Action assigned",
     3: "Action started",
-    4: "Action completed",
-    5: "Resolution confirmed",
+    4: "Action in progress",
+    5: "Action completed",
 }
 
 
@@ -245,6 +247,18 @@ def kpi_key(value):
         "cp percent",
     }:
         return "cp"
+    if "production" in normalized:
+        return "production"
+    if "cdd" in normalized:
+        return "cdd"
+    if "ctb" in normalized:
+        return "ctb"
+    if "fsd" in normalized:
+        return "fsd"
+    if "market inventory" in normalized:
+        return "market inventory"
+    elif "inventory" in normalized:
+        return "inventory"
     # Only plain sales KPIs share the key; "Sales tool delivery" and
     # "Sales Training" are different KPIs.
     if normalized in {"sales", "cs sales"}:
@@ -487,7 +501,23 @@ def format_due_date(value):
     return text_value
 
 
+UNICODE_STATUS_MAP = {
+    "⚪": "Action not assigned",
+    "○": "Action not assigned",
+    "◔": "Action assigned",
+    "◑": "Action started",
+    "◐": "Action started",
+    "◕": "Action in progress",
+    "●": "Action completed",
+    "✔": "Action completed",
+    "✓": "Action completed",
+}
+
+
 def format_action_status(value):
+    if value is None or pd.isna(value):
+        return "Action not assigned"
+
     numeric_value = pd.to_numeric(value, errors="coerce")
 
     if not pd.isna(numeric_value):
@@ -496,17 +526,38 @@ def format_action_status(value):
             f"Status {int(numeric_value)}",
         )
 
-    return clean_cell_text(value) or "Status not entered"
+    text = clean_cell_text(value)
+    if text in UNICODE_STATUS_MAP:
+        return UNICODE_STATUS_MAP[text]
+
+    t_lower = text.lower()
+    if "not assigned" in t_lower or "unassigned" in t_lower or "⚪" in text or "○" in text:
+        return "Action not assigned"
+    if "assigned" in t_lower or "quarter" in t_lower or "◔" in text:
+        return "Action assigned"
+    if "in progress" in t_lower or "inprogress" in t_lower or "3/4" in t_lower or "three quarter" in t_lower or "◕" in text:
+        return "Action in progress"
+    if "started" in t_lower or "half" in t_lower or "1/2" in t_lower or "ongoing" in t_lower or "◑" in text or "◐" in text:
+        return "Action started"
+    if "completed" in t_lower or "closed" in t_lower or "confirmed" in t_lower or "resolution" in t_lower or "full" in t_lower or "●" in text:
+        return "Action completed"
+
+    return text or "Action not assigned"
 
 
 def action_status_class(status):
-    return {
-        "Action not assigned": "action-status-not-assigned",
-        "Action assigned": "action-status-assigned",
-        "Action started": "action-status-started",
-        "Action completed": "action-status-completed",
-        "Resolution confirmed": "action-status-confirmed",
-    }.get(status, "action-status-unknown")
+    s = str(status).strip().lower()
+    if "not assigned" in s or "unassigned" in s or s in {"1", "1.0", "⚪", "○"}:
+        return "action-status-not-assigned"
+    if "assigned" in s or s in {"2", "2.0", "◔"}:
+        return "action-status-assigned"
+    if "in progress" in s or "inprogress" in s or s in {"4", "4.0", "◕"} or "three quarter" in s:
+        return "action-status-in-progress"
+    if "started" in s or "ongoing" in s or s in {"3", "3.0", "◑", "◐"} or "half" in s:
+        return "action-status-started"
+    if "completed" in s or "closed" in s or "confirmed" in s or "resolution" in s or s in {"5", "5.0", "●"}:
+        return "action-status-completed"
+    return "action-status-unknown"
 
 
 KPI_NAME_STOPWORDS = {
@@ -1160,6 +1211,13 @@ app = Dash(
 server = app.server
 
 
+@server.route("/api/sync", methods=["GET", "POST"])
+def api_sync_endpoint():
+    res = sharepoint_sync.sync_now()
+    data_loader.reload_all_data(force=True)
+    return json.dumps(res), 200, {"Content-Type": "application/json"}
+
+
 # =========================================================
 # LOAD CSS
 # =========================================================
@@ -1766,12 +1824,12 @@ def is_closed_action_status(status_val):
     if not status_val or pd.isna(status_val):
         return False
     s = str(status_val).strip().lower()
-    return s in {
-        "action completed",
-        "resolution confirmed",
-        "completed",
-        "confirmed",
-    }
+    return (
+        s in {"5", "5.0", "●", "✔", "✓", "action completed", "completed", "closed", "resolution confirmed", "confirmed"}
+        or "completed" in s
+        or "confirmed" in s
+        or "closed" in s
+    )
 
 
 def format_impact_badge(impact_val):
@@ -3400,7 +3458,8 @@ def serve_layout():
                 className="top-navigation",
             ),
             dcc.Store(id="one-pager-download-state"),
-            dcc.Interval(id="live-sync-interval", interval=60000, n_intervals=0),
+            dcc.Store(id="active-rca-modal-state", data={"is_open": False, "function": None, "month": None}),
+            dcc.Interval(id="live-sync-interval", interval=20000, n_intervals=0),
             dcc.Store(id="live-sync-state-store"),
             html.Section(
                 [
@@ -3725,7 +3784,7 @@ app.layout = serve_layout
 
 
 # =========================================================
-# BACKGROUND LIVE SYNC REFRESH (1-HOUR CYCLE)
+# BACKGROUND LIVE AUTO-SYNC (20-SECOND CYCLE)
 # =========================================================
 
 @app.callback(
@@ -3734,7 +3793,7 @@ app.layout = serve_layout
     prevent_initial_call=True,
 )
 def handle_live_sync_trigger(n_intervals):
-    return {"last_loaded": getattr(_data_store, "_last_loaded", 0.0)}
+    return {"last_loaded": getattr(_data_store, "_last_loaded", time.time()), "ts": time.time()}
 
 
 @app.callback(
@@ -3916,7 +3975,7 @@ app.clientside_callback(
 
 
 # =========================================================
-# CONTINUOUS-RED DETAIL MODAL CALLBACK
+# CONTINUOUS-RED DETAIL MODAL CALLBACK (STATE-PRESERVING)
 # =========================================================
 
 @app.callback(
@@ -3924,55 +3983,103 @@ app.clientside_callback(
     Output("continuous-red-modal-title", "children"),
     Output("continuous-red-modal-month", "children"),
     Output("continuous-red-modal-body", "children"),
+    Output("active-rca-modal-state", "data"),
     Input(
         {"type": "continuous-red-card", "function": ALL},
         "n_clicks",
     ),
     Input("close-continuous-red-modal", "n_clicks"),
     Input("continuous-red-modal-backdrop", "n_clicks"),
+    Input("dmb-month-filter", "value"),
+    Input("live-sync-state-store", "data"),
+    State("active-rca-modal-state", "data"),
     State("dmb-month-filter", "value"),
     prevent_initial_call=True,
 )
-def toggle_continuous_red_modal(
+def manage_continuous_red_modal(
     card_clicks,
     close_clicks,
     backdrop_clicks,
-    month_value,
+    month_filter_val,
+    sync_data,
+    current_modal_state,
+    month_state,
 ):
-    del card_clicks, close_clicks, backdrop_clicks
+    ctx_inst = dash.callback_context
+    current_modal_state = current_modal_state or {"is_open": False, "function": None, "month": None}
+    selected_month = month_filter_val or month_state or current_modal_state.get("month") or default_month.strftime("%Y-%m-%d")
 
-    triggered_id = ctx.triggered_id
+    if not ctx_inst or not ctx_inst.triggered:
+        raise PreventUpdate
 
-    if isinstance(triggered_id, str) and triggered_id in {
-        "close-continuous-red-modal",
-        "continuous-red-modal-backdrop",
-    }:
+    trig_id = getattr(dash.ctx, "triggered_id", None)
+
+    # 1. Close Button or Backdrop Clicked
+    if trig_id in ("close-continuous-red-modal", "continuous-red-modal-backdrop"):
+        close_has_click = any(
+            item.get("value") for item in ctx_inst.triggered
+            if item.get("prop_id", "").startswith(str(trig_id))
+        )
+        if close_has_click:
+            return (
+                "continuous-red-modal continuous-red-modal-hidden",
+                no_update,
+                no_update,
+                no_update,
+                {"is_open": False, "function": None, "month": selected_month},
+            )
+        raise PreventUpdate
+
+    # 2. Genuine User Click on an RCA Card (MUST have value > 0, not component mount value=0/None)
+    card_clicked_fn = None
+    if isinstance(trig_id, dict) and trig_id.get("type") == "continuous-red-card":
+        for item in ctx_inst.triggered:
+            val = item.get("value")
+            prop_id = item.get("prop_id", "")
+            if "continuous-red-card" in prop_id and val is not None and val > 0:
+                card_clicked_fn = trig_id.get("function")
+                break
+
+    # Fallback for older Dash versions or array inspection
+    if card_clicked_fn is None and trig_id is None:
+        for item in ctx_inst.triggered:
+            prop_id = item.get("prop_id", "")
+            val = item.get("value")
+            if "continuous-red-card" in prop_id and val is not None and val > 0:
+                try:
+                    prop_clean = prop_id.split(".")[0]
+                    parsed = json.loads(prop_clean)
+                    if parsed.get("type") == "continuous-red-card":
+                        card_clicked_fn = parsed.get("function")
+                        break
+                except Exception:
+                    pass
+
+    if card_clicked_fn:
+        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(card_clicked_fn, selected_month)
         return (
-            "continuous-red-modal continuous-red-modal-hidden",
-            no_update,
-            no_update,
-            no_update,
+            c_class,
+            c_title,
+            c_month,
+            c_body,
+            {"is_open": True, "function": card_clicked_fn, "month": selected_month},
         )
 
-    if not isinstance(triggered_id, dict):
+    # 3. If modal is currently OPEN (e.g. background 20s interval / card re-mount / month change):
+    # Strictly refresh content for the CURRENT open function (never switch to Card 1 / Quality!)
+    if current_modal_state.get("is_open") and current_modal_state.get("function"):
+        current_fn = current_modal_state.get("function")
+        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(current_fn, selected_month)
         return (
-            "continuous-red-modal continuous-red-modal-hidden",
-            no_update,
-            no_update,
-            no_update,
+            c_class,
+            c_title,
+            c_month,
+            c_body,
+            {"is_open": True, "function": current_fn, "month": selected_month},
         )
 
-    click_value = ctx.triggered[0].get("value")
-    if not click_value:
-        return (
-            "continuous-red-modal continuous-red-modal-hidden",
-            no_update,
-            no_update,
-            no_update,
-        )
-
-    function_name = triggered_id.get("function", "")
-    return get_continuous_red_modal_content(function_name, month_value)
+    # 4. Modal is closed and background interval triggered -> Do nothing
+    raise PreventUpdate
 
 
 # =========================================================
