@@ -668,7 +668,7 @@
 
 .action-status-pill {
     display: inline-block;
-    padding: 7px 11px;
+    padding: 6px 12px;
     border-radius: 15px;
     font-size: 12px;
     font-weight: 750;
@@ -678,37 +678,44 @@
 .action-status-not-assigned {
     background: #fbe1e6;
     color: #dc3d56;
+    border: 1px solid #fecdd3;
 }
 
 .action-status-assigned {
-    background: #fff0d2;
-    color: #a66b00;
+    background: #f3e8ff;
+    color: #7e22ce;
+    border: 1px solid #e9d5ff;
 }
 
 .action-status-started {
     background: #e0f2fe;
     color: #0284c7;
+    border: 1px solid #bae6fd;
 }
 
 .action-status-in-progress,
 .action-status-inprogress {
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
 }
 
 .action-status-completed {
     background: #dcefe8;
     color: #168b69;
+    border: 1px solid #bbf7d0;
 }
 
 .action-status-confirmed {
     background: #cce8dc;
     color: #0c6f52;
+    border: 1px solid #99f6e4;
 }
 
 .action-status-unknown {
     background: #e7eef3;
     color: #6e879b;
+    border: 1px solid #cbd5e1;
 }
 
 .modal-data-warning {
