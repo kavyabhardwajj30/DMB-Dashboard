@@ -185,7 +185,8 @@ def push_to_github_if_configured(filename: str, content: bytes) -> bool:
 
     try:
         path = f"data/{filename}"
-        api_url = f"https://api.github.com/repos/{repo}/contents/{path}"
+        quoted_path = urllib.parse.quote(path)
+        api_url = f"https://api.github.com/repos/{repo}/contents/{quoted_path}"
 
         # Get existing file SHA if it exists
         sha = None
