@@ -74,6 +74,22 @@
             backdrop.addEventListener('click', closeModalInstantly);
         }
 
+        // ----------------------------------------------------
+        // 3. Instant Visual Feedback on RCA Card Click
+        // ----------------------------------------------------
+        var rcaCards = document.querySelectorAll('.continuous-red-panel-active');
+        rcaCards.forEach(function (card) {
+            if (!card.hasAttribute('data-click-bound')) {
+                card.setAttribute('data-click-bound', 'true');
+                card.addEventListener('click', function () {
+                    card.classList.add('rca-card-opening');
+                    setTimeout(function () {
+                        card.classList.remove('rca-card-opening');
+                    }, 800);
+                });
+            }
+        });
+
         if (!window.__modalEscapeBound) {
             window.__modalEscapeBound = true;
             document.addEventListener('keydown', function (e) {
