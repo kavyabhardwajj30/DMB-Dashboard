@@ -1,4 +1,6 @@
 import os
+import json
+import time
 from pathlib import Path
 from datetime import date, datetime
 from io import BytesIO
@@ -245,6 +247,18 @@ def kpi_key(value):
         "cp percent",
     }:
         return "cp"
+    if "production" in normalized:
+        return "production"
+    if "cdd" in normalized:
+        return "cdd"
+    if "ctb" in normalized:
+        return "ctb"
+    if "fsd" in normalized:
+        return "fsd"
+    if "market inventory" in normalized:
+        return "market inventory"
+    elif "inventory" in normalized:
+        return "inventory"
     # Only plain sales KPIs share the key; "Sales tool delivery" and
     # "Sales Training" are different KPIs.
     if normalized in {"sales", "cs sales"}:
@@ -488,6 +502,9 @@ def format_due_date(value):
 
 
 def format_action_status(value):
+    if value is None or pd.isna(value):
+        return "Action not assigned"
+
     numeric_value = pd.to_numeric(value, errors="coerce")
 
     if not pd.isna(numeric_value):
@@ -496,17 +513,35 @@ def format_action_status(value):
             f"Status {int(numeric_value)}",
         )
 
-    return clean_cell_text(value) or "Status not entered"
+    text = clean_cell_text(value)
+    t_lower = text.lower()
+    if "not assigned" in t_lower:
+        return "Action not assigned"
+    if "assigned" in t_lower:
+        return "Action assigned"
+    if "in progress" in t_lower or "inprogress" in t_lower or "started" in t_lower or "ongoing" in t_lower:
+        return "Action in progress"
+    if "completed" in t_lower or "closed" in t_lower:
+        return "Action completed"
+    if "confirmed" in t_lower or "resolution" in t_lower:
+        return "Resolution confirmed"
+
+    return text or "Action not assigned"
 
 
 def action_status_class(status):
-    return {
-        "Action not assigned": "action-status-not-assigned",
-        "Action assigned": "action-status-assigned",
-        "Action started": "action-status-started",
-        "Action completed": "action-status-completed",
-        "Resolution confirmed": "action-status-confirmed",
-    }.get(status, "action-status-unknown")
+    s = str(status).strip().lower()
+    if "not assigned" in s:
+        return "action-status-not-assigned"
+    if "assigned" in s:
+        return "action-status-assigned"
+    if "in progress" in s or "inprogress" in s or "started" in s or "ongoing" in s:
+        return "action-status-started"
+    if "completed" in s or "closed" in s:
+        return "action-status-completed"
+    if "confirmed" in s:
+        return "action-status-confirmed"
+    return "action-status-unknown"
 
 
 KPI_NAME_STOPWORDS = {
@@ -1158,6 +1193,13 @@ app = Dash(
 )
 
 server = app.server
+
+
+@server.route("/api/sync", methods=["GET", "POST"])
+def api_sync_endpoint():
+    res = sharepoint_sync.sync_now()
+    data_loader.reload_all_data(force=True)
+    return json.dumps(res), 200, {"Content-Type": "application/json"}
 
 
 # =========================================================
@@ -3386,6 +3428,18 @@ def serve_layout():
                     ),
                     html.Div(
                         [
+                            html.Span(
+                                "🟢 Live Sync (20s)",
+                                id="sync-status-indicator",
+                                className="sync-status-pill",
+                            ),
+                            html.Button(
+                                "⚡ Sync Mail Now",
+                                id="sync-mail-button",
+                                className="sync-button",
+                                n_clicks=0,
+                                title="Immediately check mailbox & sync all 3 Excel workbooks",
+                            ),
                             html.Button(
                                 "Download 1 Pager",
                                 id="download-one-pager-button",
@@ -3400,7 +3454,8 @@ def serve_layout():
                 className="top-navigation",
             ),
             dcc.Store(id="one-pager-download-state"),
-            dcc.Interval(id="live-sync-interval", interval=60000, n_intervals=0),
+            dcc.Store(id="active-rca-modal-state", data={"is_open": False, "function": None, "month": None}),
+            dcc.Interval(id="live-sync-interval", interval=20000, n_intervals=0),
             dcc.Store(id="live-sync-state-store"),
             html.Section(
                 [
@@ -3725,16 +3780,38 @@ app.layout = serve_layout
 
 
 # =========================================================
-# BACKGROUND LIVE SYNC REFRESH (1-HOUR CYCLE)
+# LIVE SYNC ENGINE REFRESH (20-SECOND CYCLE & MANUAL TRIGGER)
 # =========================================================
 
 @app.callback(
     Output("live-sync-state-store", "data"),
+    Output("sync-status-indicator", "children"),
     Input("live-sync-interval", "n_intervals"),
+    Input("sync-mail-button", "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_live_sync_trigger(n_intervals):
-    return {"last_loaded": getattr(_data_store, "_last_loaded", 0.0)}
+def handle_live_sync_trigger(n_intervals, sync_clicks):
+    ctx_inst = dash.callback_context
+    is_manual = False
+    if ctx_inst and ctx_inst.triggered:
+        trig = ctx_inst.triggered[0]["prop_id"]
+        if "sync-mail-button" in trig:
+            is_manual = True
+
+    if is_manual:
+        res = sharepoint_sync.sync_now()
+        data_loader.reload_all_data(force=True)
+        now_str = datetime.now().strftime("%I:%M:%S %p")
+        updated_count = len(res.get("files_updated", []))
+        if updated_count > 0:
+            pill = f"⚡ Synced ({updated_count} files at {now_str})"
+        else:
+            pill = f"🟢 In Sync (Checked {now_str})"
+    else:
+        now_str = datetime.now().strftime("%I:%M:%S %p")
+        pill = f"🟢 Live Sync (20s - {now_str})"
+
+    return {"last_loaded": getattr(_data_store, "_last_loaded", time.time()), "ts": time.time()}, pill
 
 
 @app.callback(
@@ -3916,7 +3993,7 @@ app.clientside_callback(
 
 
 # =========================================================
-# CONTINUOUS-RED DETAIL MODAL CALLBACK
+# CONTINUOUS-RED DETAIL MODAL CALLBACK (STATE-PRESERVING)
 # =========================================================
 
 @app.callback(
@@ -3924,55 +4001,88 @@ app.clientside_callback(
     Output("continuous-red-modal-title", "children"),
     Output("continuous-red-modal-month", "children"),
     Output("continuous-red-modal-body", "children"),
+    Output("active-rca-modal-state", "data"),
     Input(
         {"type": "continuous-red-card", "function": ALL},
         "n_clicks",
     ),
     Input("close-continuous-red-modal", "n_clicks"),
     Input("continuous-red-modal-backdrop", "n_clicks"),
+    Input("dmb-month-filter", "value"),
+    Input("live-sync-state-store", "data"),
+    State("active-rca-modal-state", "data"),
     State("dmb-month-filter", "value"),
     prevent_initial_call=True,
 )
-def toggle_continuous_red_modal(
+def manage_continuous_red_modal(
     card_clicks,
     close_clicks,
     backdrop_clicks,
-    month_value,
+    month_filter_val,
+    sync_data,
+    current_modal_state,
+    month_state,
 ):
-    del card_clicks, close_clicks, backdrop_clicks
+    ctx_inst = dash.callback_context
+    current_modal_state = current_modal_state or {"is_open": False, "function": None, "month": None}
+    selected_month = month_filter_val or month_state or current_modal_state.get("month") or default_month.strftime("%Y-%m-%d")
 
-    triggered_id = ctx.triggered_id
+    if not ctx_inst or not ctx_inst.triggered:
+        raise PreventUpdate
 
-    if isinstance(triggered_id, str) and triggered_id in {
-        "close-continuous-red-modal",
-        "continuous-red-modal-backdrop",
-    }:
+    triggered_prop = ctx_inst.triggered[0]["prop_id"]
+    triggered_val = ctx_inst.triggered[0]["value"]
+
+    # 1. User explicitly clicks "Back" button or Backdrop to close modal
+    if "close-continuous-red-modal" in triggered_prop or "continuous-red-modal-backdrop" in triggered_prop:
+        if triggered_val:
+            return (
+                "continuous-red-modal continuous-red-modal-hidden",
+                no_update,
+                no_update,
+                no_update,
+                {"is_open": False, "function": None, "month": selected_month},
+            )
+        raise PreventUpdate
+
+    # 2. User clicks a Red KPI Card for a function
+    if "continuous-red-card" in triggered_prop:
+        try:
+            prop_str = triggered_prop.split(".")[0]
+            prop_dict = json.loads(prop_str)
+            fn = prop_dict.get("function")
+            if triggered_val and triggered_val > 0 and fn:
+                c_class, c_title, c_month, c_body = get_continuous_red_modal_content(fn, selected_month)
+                return (
+                    c_class,
+                    c_title,
+                    c_month,
+                    c_body,
+                    {"is_open": True, "function": fn, "month": selected_month},
+                )
+        except Exception:
+            pass
+
+    # 3. Live Sync / Poller Trigger OR Month Filter Change while modal is OPEN -> Keep open and refresh content!
+    if current_modal_state.get("is_open") and current_modal_state.get("function"):
+        fn = current_modal_state.get("function")
+        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(fn, selected_month)
         return (
-            "continuous-red-modal continuous-red-modal-hidden",
-            no_update,
-            no_update,
-            no_update,
+            c_class,
+            c_title,
+            c_month,
+            c_body,
+            {"is_open": True, "function": fn, "month": selected_month},
         )
 
-    if not isinstance(triggered_id, dict):
-        return (
-            "continuous-red-modal continuous-red-modal-hidden",
-            no_update,
-            no_update,
-            no_update,
-        )
-
-    click_value = ctx.triggered[0].get("value")
-    if not click_value:
-        return (
-            "continuous-red-modal continuous-red-modal-hidden",
-            no_update,
-            no_update,
-            no_update,
-        )
-
-    function_name = triggered_id.get("function", "")
-    return get_continuous_red_modal_content(function_name, month_value)
+    # 4. If modal is currently closed, keep it closed
+    return (
+        "continuous-red-modal continuous-red-modal-hidden",
+        no_update,
+        no_update,
+        no_update,
+        {"is_open": False, "function": None, "month": selected_month},
+    )
 
 
 # =========================================================

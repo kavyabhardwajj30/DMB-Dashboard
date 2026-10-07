@@ -245,7 +245,7 @@ def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int,
         (updated_count, list_of_updated_filenames)
     """
     host = _env("IMAP_HOST", "imap.gmail.com")
-    user = _env("IMAP_USER", "dmbdashboard@gmail.com")
+    user = _env("IMAP_USER", "dmbdashboard30@gmail.com")
     password = _env("IMAP_PASSWORD")
 
     if not password:
@@ -264,34 +264,24 @@ def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int,
 
     try:
         port = int(_env("IMAP_PORT", "993"))
-        with imaplib.IMAP4_SSL(host, port, timeout=15) as imap:
+        with imaplib.IMAP4_SSL(host, port, timeout=25) as imap:
             clean_password = password.replace(" ", "") if "gmail.com" in host.lower() else password
             imap.login(user, clean_password)
             imap.select(_env("IMAP_FOLDER", "INBOX"))
 
-            search_queries = [
-                f'SUBJECT "{marker}"',
-                'SUBJECT "DMB-Sync"',
-                'SUBJECT "DMB"',
-                'SUBJECT "Masterfile"',
-                'SUBJECT "Functional"',
-                'SUBJECT "Strategic"',
-                'ALL',
-            ]
-
             seen_ids = set()
             ordered_ids = []
 
-            for query in search_queries:
-                try:
-                    status, data = imap.search(None, query)
-                    if status == "OK" and data and data[0]:
-                        for msg_id in data[0].split():
-                            if msg_id not in seen_ids:
-                                seen_ids.add(msg_id)
-                                ordered_ids.append(msg_id)
-                except Exception:
-                    pass
+            # Direct fast search
+            try:
+                status, data = imap.search(None, "ALL")
+                if status == "OK" and data and data[0]:
+                    for msg_id in data[0].split():
+                        if msg_id not in seen_ids:
+                            seen_ids.add(msg_id)
+                            ordered_ids.append(msg_id)
+            except Exception:
+                pass
 
             if not ordered_ids:
                 return 0, []

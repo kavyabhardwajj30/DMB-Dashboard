@@ -56,12 +56,12 @@ def load_config() -> dict:
     """Load configuration from sharepoint_config.json or environment variables."""
     default_config = {
         "sync_enabled": True,
-        "poll_interval_seconds": 3600,
+        "poll_interval_seconds": 20,
         "sync_mode": "auto",
         "mailbox": {
             "imap_host": os.getenv("IMAP_HOST", "imap.gmail.com"),
             "imap_port": int(os.getenv("IMAP_PORT", "993")),
-            "imap_user": os.getenv("IMAP_USER", "dmbdashboard@gmail.com"),
+            "imap_user": os.getenv("IMAP_USER", "dmbdashboard30@gmail.com"),
         },
         "local_synced_folder": str(Path.home() / "OneDrive - Philips"),
         "sharepoint_urls": {
@@ -522,14 +522,14 @@ class SharePointSyncManager:
             return
 
         def _poller():
-            logger.info("SharePoint Live Sync background poller started (1-hour interval).")
+            logger.info("SharePoint Live Sync background poller started (20-second interval).")
             try:
                 self.sync_once()
             except Exception as e:
                 logger.error("Startup sync error: %s", e)
 
             while not self._stop_event.is_set():
-                interval = max(60, self.config.get("poll_interval_seconds", 3600))
+                interval = max(10, int(self.config.get("poll_interval_seconds", 20)))
                 time.sleep(interval)
                 try:
                     self.sync_once()

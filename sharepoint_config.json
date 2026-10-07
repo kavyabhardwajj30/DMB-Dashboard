@@ -1,6 +1,6 @@
 {
   "sync_enabled": true,
-  "poll_interval_seconds": 3600,
+  "poll_interval_seconds": 20,
   "sync_mode": "auto",
   "local_synced_folder": "C:/Users/320320898/OneDrive - Philips",
   "sharepoint_urls": {
