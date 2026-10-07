@@ -682,9 +682,9 @@
 }
 
 .action-status-assigned {
-    background: #ffedd5;
-    color: #c2410c;
-    border: 1px solid #fed7aa;
+    background: #f3e8ff;
+    color: #7e22ce;
+    border: 1px solid #e9d5ff;
 }
 
 .action-status-started {
