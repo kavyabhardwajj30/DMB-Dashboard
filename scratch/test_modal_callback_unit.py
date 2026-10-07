@@ -68,6 +68,33 @@ class TestManageContinuousRedModal(unittest.TestCase):
             self.assertEqual(s_state["function"], "Marketing")
             self.assertTrue(s_state["is_open"])
 
+    def test_component_remount_does_not_switch_to_quality(self):
+        # Scenario 2b: Card container re-renders in Dash, triggered_id is set to Quality with value=0 or None
+        mock_ctx_remount = MagicMock()
+        mock_ctx_remount.triggered = [
+            {"prop_id": '{"function":"Quality","type":"continuous-red-card"}.n_clicks', "value": 0}
+        ]
+        with patch("dash.callback_context", mock_ctx_remount), patch("dash.ctx") as mock_dash_ctx:
+            mock_dash_ctx.triggered_id = {"type": "continuous-red-card", "function": "Quality"}
+            mock_dash_ctx.triggered = mock_ctx_remount.triggered
+            
+            res_remount = manage_continuous_red_modal(
+                card_clicks=[0, 0, 0, 0, 0, 0],
+                close_clicks=0,
+                backdrop_clicks=0,
+                month_filter_val="2026-07-01",
+                sync_data={"ts": 130},
+                current_modal_state={"is_open": True, "function": "Marketing", "month": "2026-07-01"},
+                month_state="2026-07-01",
+            )
+            r_class, r_title, r_month, r_body, r_state = res_remount
+            print("After Card Re-mount with Quality ID (val=0):", r_title, r_state)
+            self.assertEqual(r_class, "continuous-red-modal")
+            self.assertIn("Marketing", r_title)
+            self.assertNotIn("Quality", r_title)
+            self.assertEqual(r_state["function"], "Marketing")
+            self.assertTrue(r_state["is_open"])
+
     def test_close_modal(self):
         # Scenario 3: user clicks close button
         mock_ctx = MagicMock()
