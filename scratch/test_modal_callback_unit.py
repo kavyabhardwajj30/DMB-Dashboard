@@ -10,59 +10,63 @@ import pandas as pd
 from app import manage_continuous_red_modal, default_month
 
 class TestManageContinuousRedModal(unittest.TestCase):
-    def test_single_click_card_dash_ctx(self):
-        # Scenario 1: dash.ctx.triggered_id is a dict with {"type": "continuous-red-card", "function": "ISC & Procurement"}
+    def test_open_marketing_and_background_sync(self):
+        # Scenario 1: User clicks Marketing card
         mock_ctx = MagicMock()
         mock_ctx.triggered = [
-            {"prop_id": '{"function":"ISC & Procurement","type":"continuous-red-card"}.n_clicks', "value": 1}
+            {"prop_id": '{"function":"Marketing","type":"continuous-red-card"}.n_clicks', "value": 1}
         ]
         with patch("dash.callback_context", mock_ctx), patch("dash.ctx") as mock_dash_ctx:
-            mock_dash_ctx.triggered_id = {"type": "continuous-red-card", "function": "ISC & Procurement"}
+            mock_dash_ctx.triggered_id = {"type": "continuous-red-card", "function": "Marketing"}
             mock_dash_ctx.triggered = mock_ctx.triggered
             
             res = manage_continuous_red_modal(
-                card_clicks=[1],
+                card_clicks=[0, 0, 0, 0, 0, 1],
                 close_clicks=0,
                 backdrop_clicks=0,
                 month_filter_val="2026-07-01",
-                sync_data={"ts": 123},
+                sync_data={"ts": 100},
                 current_modal_state={"is_open": False, "function": None, "month": "2026-07-01"},
                 month_state="2026-07-01",
             )
             c_class, c_title, c_month, c_body, state = res
-            print("Scenario 1 Result Class:", c_class)
-            print("Scenario 1 Title:", c_title)
-            print("Scenario 1 State:", state)
+            print("Opened Marketing Modal:", c_title, state)
             self.assertEqual(c_class, "continuous-red-modal")
-            self.assertTrue("ISC & Procurement" in c_title)
+            self.assertIn("Marketing", c_title)
+            self.assertEqual(state["function"], "Marketing")
             self.assertTrue(state["is_open"])
-            self.assertEqual(state["function"], "ISC & Procurement")
 
-    def test_multi_trigger_with_sync(self):
-        # Scenario 2: live sync state changed at the same time as card click
-        mock_ctx = MagicMock()
-        mock_ctx.triggered = [
-            {"prop_id": "live-sync-state-store.data", "value": {"ts": 456}},
-            {"prop_id": '{"function":"Regulatory","type":"continuous-red-card"}.n_clicks', "value": 1}
+        # Scenario 2: 20s Background Sync fires while Marketing is OPEN -> MUST STAY ON MARKETING!
+        mock_ctx_sync = MagicMock()
+        mock_ctx_sync.triggered = [
+            {"prop_id": "live-sync-state-store.data", "value": {"ts": 120}},
+            {"prop_id": '{"function":"Quality","type":"continuous-red-card"}.n_clicks', "value": 0},
+            {"prop_id": '{"function":"Regulatory","type":"continuous-red-card"}.n_clicks', "value": 0},
+            {"prop_id": '{"function":"ISC & Procurement","type":"continuous-red-card"}.n_clicks', "value": 0},
+            {"prop_id": '{"function":"R&D","type":"continuous-red-card"}.n_clicks', "value": 0},
+            {"prop_id": '{"function":"Customer Service","type":"continuous-red-card"}.n_clicks', "value": 0},
+            {"prop_id": '{"function":"Marketing","type":"continuous-red-card"}.n_clicks', "value": 1},
         ]
-        with patch("dash.callback_context", mock_ctx), patch("dash.ctx") as mock_dash_ctx:
-            mock_dash_ctx.triggered_id = None
-            mock_dash_ctx.triggered = mock_ctx.triggered
+        with patch("dash.callback_context", mock_ctx_sync), patch("dash.ctx") as mock_dash_ctx:
+            mock_dash_ctx.triggered_id = "live-sync-state-store"
+            mock_dash_ctx.triggered = mock_ctx_sync.triggered
             
-            res = manage_continuous_red_modal(
-                card_clicks=[1],
+            res_sync = manage_continuous_red_modal(
+                card_clicks=[0, 0, 0, 0, 0, 1],
                 close_clicks=0,
                 backdrop_clicks=0,
                 month_filter_val="2026-07-01",
-                sync_data={"ts": 456},
-                current_modal_state={"is_open": False, "function": None, "month": "2026-07-01"},
+                sync_data={"ts": 120},
+                current_modal_state=state,  # currently open with Marketing
                 month_state="2026-07-01",
             )
-            c_class, c_title, c_month, c_body, state = res
-            print("Scenario 2 Result:", c_title, state)
-            self.assertEqual(c_class, "continuous-red-modal")
-            self.assertTrue("Regulatory" in c_title)
-            self.assertTrue(state["is_open"])
+            s_class, s_title, s_month, s_body, s_state = res_sync
+            print("After Background Sync with Marketing Open:", s_title, s_state)
+            self.assertEqual(s_class, "continuous-red-modal")
+            self.assertIn("Marketing", s_title)
+            self.assertNotIn("Quality", s_title)
+            self.assertEqual(s_state["function"], "Marketing")
+            self.assertTrue(s_state["is_open"])
 
     def test_close_modal(self):
         # Scenario 3: user clicks close button
@@ -80,40 +84,16 @@ class TestManageContinuousRedModal(unittest.TestCase):
                 backdrop_clicks=0,
                 month_filter_val="2026-07-01",
                 sync_data={"ts": 456},
-                current_modal_state={"is_open": True, "function": "Regulatory", "month": "2026-07-01"},
+                current_modal_state={"is_open": True, "function": "Marketing", "month": "2026-07-01"},
                 month_state="2026-07-01",
             )
             c_class, c_title, c_month, c_body, state = res
-            print("Scenario 3 Close Result:", c_class, state)
+            print("Close Result:", c_class, state)
             self.assertIn("continuous-red-modal-hidden", c_class)
             self.assertFalse(state["is_open"])
 
-    def test_background_sync_while_open(self):
-        # Scenario 4: live sync fires while modal is OPEN -> refreshes without closing
-        mock_ctx = MagicMock()
-        mock_ctx.triggered = [
-            {"prop_id": "live-sync-state-store.data", "value": {"ts": 789}}
-        ]
-        with patch("dash.callback_context", mock_ctx), patch("dash.ctx") as mock_dash_ctx:
-            mock_dash_ctx.triggered_id = "live-sync-state-store"
-            mock_dash_ctx.triggered = mock_ctx.triggered
-            
-            res = manage_continuous_red_modal(
-                card_clicks=[0],
-                close_clicks=0,
-                backdrop_clicks=0,
-                month_filter_val="2026-07-01",
-                sync_data={"ts": 789},
-                current_modal_state={"is_open": True, "function": "ISC & Procurement", "month": "2026-07-01"},
-                month_state="2026-07-01",
-            )
-            c_class, c_title, c_month, c_body, state = res
-            print("Scenario 4 Open Refresh Result:", c_title, state)
-            self.assertEqual(c_class, "continuous-red-modal")
-            self.assertTrue(state["is_open"])
-
     def test_background_sync_while_closed(self):
-        # Scenario 5: live sync fires while modal is CLOSED -> PreventUpdate
+        # Scenario 4: live sync fires while modal is CLOSED -> PreventUpdate
         mock_ctx = MagicMock()
         mock_ctx.triggered = [
             {"prop_id": "live-sync-state-store.data", "value": {"ts": 789}}
@@ -132,7 +112,7 @@ class TestManageContinuousRedModal(unittest.TestCase):
                     current_modal_state={"is_open": False, "function": None, "month": "2026-07-01"},
                     month_state="2026-07-01",
                 )
-            print("Scenario 5 Successfully Prevented Update when modal was closed!")
+            print("Scenario 4 Successfully Prevented Update when modal was closed!")
 
 if __name__ == "__main__":
     unittest.main()

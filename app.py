@@ -4012,38 +4012,10 @@ def manage_continuous_red_modal(
     if not ctx_inst or not ctx_inst.triggered:
         raise PreventUpdate
 
-    # Check for card click trigger across all triggered items
-    clicked_fn = None
-    close_clicked = False
-
-    # Check dash.ctx.triggered_id first if available
     trig_id = getattr(dash.ctx, "triggered_id", None)
-    if isinstance(trig_id, dict) and trig_id.get("type") == "continuous-red-card":
-        clicked_fn = trig_id.get("function")
-    elif trig_id in ("close-continuous-red-modal", "continuous-red-modal-backdrop"):
-        close_clicked = True
 
-    # Also inspect ctx_inst.triggered for thorough multi-trigger reliability
-    for item in ctx_inst.triggered:
-        prop_id = item.get("prop_id", "")
-        val = item.get("value")
-        if not prop_id:
-            continue
-        if "close-continuous-red-modal" in prop_id or "continuous-red-modal-backdrop" in prop_id:
-            if val:
-                close_clicked = True
-        elif "continuous-red-card" in prop_id:
-            if val and val > 0:
-                try:
-                    prop_clean = prop_id.split(".")[0]
-                    parsed = json.loads(prop_clean)
-                    if parsed.get("type") == "continuous-red-card":
-                        clicked_fn = parsed.get("function")
-                except Exception:
-                    pass
-
-    # 1. User clicked Close or Backdrop
-    if close_clicked:
+    # 1. User explicitly clicked Close Button or Modal Backdrop -> Close modal
+    if trig_id in ("close-continuous-red-modal", "continuous-red-modal-backdrop"):
         return (
             "continuous-red-modal continuous-red-modal-hidden",
             no_update,
@@ -4052,27 +4024,62 @@ def manage_continuous_red_modal(
             {"is_open": False, "function": None, "month": selected_month},
         )
 
-    # 2. User clicked a Red KPI Card -> Open Modal smoothly on single click
-    if clicked_fn:
-        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(clicked_fn, selected_month)
-        return (
-            c_class,
-            c_title,
-            c_month,
-            c_body,
-            {"is_open": True, "function": clicked_fn, "month": selected_month},
-        )
+    # 2. User clicked a specific Red KPI Card -> Open modal for THAT EXACT function
+    if isinstance(trig_id, dict) and trig_id.get("type") == "continuous-red-card":
+        clicked_fn = trig_id.get("function")
+        if clicked_fn:
+            c_class, c_title, c_month, c_body = get_continuous_red_modal_content(clicked_fn, selected_month)
+            return (
+                c_class,
+                c_title,
+                c_month,
+                c_body,
+                {"is_open": True, "function": clicked_fn, "month": selected_month},
+            )
 
-    # 3. If modal is currently OPEN, and Live Sync / Month Filter updated -> Refresh content smoothly
+    # Fallback for triggers when dash.ctx.triggered_id is evaluated from callback_context
+    if trig_id is None:
+        for item in ctx_inst.triggered:
+            prop_id = item.get("prop_id", "")
+            val = item.get("value")
+            if "close-continuous-red-modal" in prop_id or "continuous-red-modal-backdrop" in prop_id:
+                if val:
+                    return (
+                        "continuous-red-modal continuous-red-modal-hidden",
+                        no_update,
+                        no_update,
+                        no_update,
+                        {"is_open": False, "function": None, "month": selected_month},
+                    )
+            elif "continuous-red-card" in prop_id and val and val > 0:
+                try:
+                    prop_clean = prop_id.split(".")[0]
+                    parsed = json.loads(prop_clean)
+                    if parsed.get("type") == "continuous-red-card":
+                        fn = parsed.get("function")
+                        if fn:
+                            c_class, c_title, c_month, c_body = get_continuous_red_modal_content(fn, selected_month)
+                            return (
+                                c_class,
+                                c_title,
+                                c_month,
+                                c_body,
+                                {"is_open": True, "function": fn, "month": selected_month},
+                            )
+                except Exception:
+                    pass
+
+    # 3. If modal is currently OPEN:
+    # Any background sync or month filter trigger MUST stay on the current open function!
     if current_modal_state.get("is_open") and current_modal_state.get("function"):
-        fn = current_modal_state.get("function")
-        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(fn, selected_month)
+        current_fn = current_modal_state.get("function")
+        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(current_fn, selected_month)
         return (
             c_class,
             c_title,
             c_month,
             c_body,
-            {"is_open": True, "function": fn, "month": selected_month},
+            {"is_open": True, "function": current_fn, "month": selected_month},
         )
 
     # 4. Modal is closed and an unhandled background event fired -> Prevent update
