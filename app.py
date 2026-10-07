@@ -3428,18 +3428,6 @@ def serve_layout():
                     ),
                     html.Div(
                         [
-                            html.Span(
-                                "🟢 Live Sync (20s)",
-                                id="sync-status-indicator",
-                                className="sync-status-pill",
-                            ),
-                            html.Button(
-                                "⚡ Sync Mail Now",
-                                id="sync-mail-button",
-                                className="sync-button",
-                                n_clicks=0,
-                                title="Immediately check mailbox & sync all 3 Excel workbooks",
-                            ),
                             html.Button(
                                 "Download 1 Pager",
                                 id="download-one-pager-button",
@@ -3780,38 +3768,16 @@ app.layout = serve_layout
 
 
 # =========================================================
-# LIVE SYNC ENGINE REFRESH (20-SECOND CYCLE & MANUAL TRIGGER)
+# BACKGROUND LIVE AUTO-SYNC (20-SECOND CYCLE)
 # =========================================================
 
 @app.callback(
     Output("live-sync-state-store", "data"),
-    Output("sync-status-indicator", "children"),
     Input("live-sync-interval", "n_intervals"),
-    Input("sync-mail-button", "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_live_sync_trigger(n_intervals, sync_clicks):
-    ctx_inst = dash.callback_context
-    is_manual = False
-    if ctx_inst and ctx_inst.triggered:
-        trig = ctx_inst.triggered[0]["prop_id"]
-        if "sync-mail-button" in trig:
-            is_manual = True
-
-    if is_manual:
-        res = sharepoint_sync.sync_now()
-        data_loader.reload_all_data(force=True)
-        now_str = datetime.now().strftime("%I:%M:%S %p")
-        updated_count = len(res.get("files_updated", []))
-        if updated_count > 0:
-            pill = f"⚡ Synced ({updated_count} files at {now_str})"
-        else:
-            pill = f"🟢 In Sync (Checked {now_str})"
-    else:
-        now_str = datetime.now().strftime("%I:%M:%S %p")
-        pill = f"🟢 Live Sync (20s - {now_str})"
-
-    return {"last_loaded": getattr(_data_store, "_last_loaded", time.time()), "ts": time.time()}, pill
+def handle_live_sync_trigger(n_intervals):
+    return {"last_loaded": getattr(_data_store, "_last_loaded", time.time()), "ts": time.time()}
 
 
 @app.callback(
