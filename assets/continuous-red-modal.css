@@ -513,6 +513,78 @@
     border-radius: 12px;
 }
 
+/* Header Metrics Group for Target and Actual */
+.rca-header-right-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.rca-header-metrics-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.rca-metric-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    padding: 4px 12px;
+    border-radius: 7px;
+    font-family: inherit;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+    letter-spacing: 0.02em;
+}
+
+.rca-metric-pill-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 750;
+}
+
+.rca-metric-pill-val {
+    font-weight: 850;
+    font-size: 13px;
+}
+
+/* Target Pill: Crisp white card with deep navy typography */
+.rca-metric-pill-target {
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+}
+
+.rca-metric-pill-target .rca-metric-pill-lbl {
+    color: #475569 !important;
+}
+
+.rca-metric-pill-target .rca-metric-pill-val {
+    color: #002d4b !important;
+}
+
+/* Actual Pill: High-visibility solid red pill with bright white typography */
+.rca-metric-pill-actual {
+    background: #dc2626 !important;
+    border: 1.5px solid #ef4444 !important;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35) !important;
+}
+
+.rca-metric-pill-actual .rca-metric-pill-lbl {
+    color: #fee2e2 !important;
+    opacity: 0.95;
+}
+
+.rca-metric-pill-actual .rca-metric-pill-val {
+    color: #ffffff !important;
+}
+
+
+
 /* Recovery Plan Unified Table */
 .rca-recovery-table-wrap {
     width: 100%;

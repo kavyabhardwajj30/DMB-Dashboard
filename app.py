@@ -1860,6 +1860,28 @@ def calculate_row_spans(total_rows, count):
     return spans
 
 
+def format_kpi_metric_display(val, unit=""):
+    if val is None or pd.isna(val):
+        return None
+    try:
+        val_f = float(val)
+    except (ValueError, TypeError):
+        u_str = f" {unit}".strip() if unit else ""
+        return f"{val}{u_str}".strip()
+    unit_clean = str(unit).strip() if unit and pd.notna(unit) else ""
+    if unit_clean == "%":
+        if 0 < val_f <= 1.0:
+            val_f *= 100
+        return f"{val_f:.1f}%"
+    elif unit_clean == "Mn":
+        return f"{val_f:.2f} Mn"
+    elif unit_clean.lower() in ["no.", "no", "nos"]:
+        return f"{int(val_f)}" if val_f == int(val_f) else f"{val_f:.1f}"
+    else:
+        suffix = f" {unit_clean}" if unit_clean else ""
+        return f"{val_f:.2f}{suffix}" if val_f % 1 != 0 else f"{int(val_f)}{suffix}"
+
+
 def create_kpi_rca_card(
     source_kpi_name,
     causes,
@@ -1869,6 +1891,9 @@ def create_kpi_rca_card(
     card_id=None,
     is_red=True,
     missing_action_text=None,
+    target_val=None,
+    actual_val=None,
+    reporting_month=None,
 ):
     disp_title = red_kpi_name or source_kpi_name
     if missing_action_text is None:
@@ -2068,6 +2093,38 @@ def create_kpi_rca_card(
     if card_id:
         card_kwargs["id"] = card_id
 
+    meta_badges = []
+    if target_val is not None and str(target_val).strip() and str(target_val).strip() not in {"—", "nan", "None"}:
+        meta_badges.append(
+            html.Span(
+                [
+                    html.Span("TARGET: ", className="rca-metric-pill-lbl"),
+                    html.Strong(str(target_val), className="rca-metric-pill-val"),
+                ],
+                className="rca-metric-pill rca-metric-pill-target",
+            )
+        )
+    if actual_val is not None and str(actual_val).strip() and str(actual_val).strip() not in {"—", "nan", "None"}:
+        meta_badges.append(
+            html.Span(
+                [
+                    html.Span("ACTUAL: ", className="rca-metric-pill-lbl"),
+                    html.Strong(str(actual_val), className="rca-metric-pill-val rca-metric-val-actual"),
+                ],
+                className="rca-metric-pill rca-metric-pill-actual",
+            )
+        )
+
+    header_right_children = []
+    if meta_badges:
+        header_right_children.append(
+            html.Div(meta_badges, className="rca-header-metrics-group")
+        )
+    if function_badge:
+        header_right_children.append(
+            html.Span(function_badge, className="rca-function-pill")
+        )
+
     header_children = [
         html.Div(
             [
@@ -2093,9 +2150,9 @@ def create_kpi_rca_card(
             className="rca-card-title-group",
         ),
     ]
-    if function_badge:
+    if header_right_children:
         header_children.append(
-            html.Span(function_badge, className="rca-function-pill")
+            html.Div(header_right_children, className="rca-header-right-group")
         )
 
     return html.Div(
@@ -2871,6 +2928,59 @@ def create_continuous_red_detail(function_name, selected_month):
     red_kpi_tables = []
     modal_kpi_options = []
 
+    def resolve_kpi_target_actual(title_name, red_name=None):
+        candidates = []
+        primary = red_name or title_name
+        if primary:
+            candidates.append(primary.split("—")[-1].strip() if "—" in primary else primary.strip())
+        secondary = title_name if primary == red_name else red_name
+        if secondary and secondary != primary:
+            candidates.append(secondary.split("—")[-1].strip() if "—" in secondary else secondary.strip())
+
+        # Pass 1: Exact match on candidate names
+        for cand in candidates:
+            norm_name = function_key(cand)
+            if not current_rows.empty:
+                for _, r in current_rows.iterrows():
+                    rk_name = str(r.get("kpi_name", "")).strip()
+                    if function_key(rk_name) == norm_name:
+                        t_val = r.get("Target")
+                        a_val = r.get("Actual")
+                        u_val = r.get("units", "")
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+            if not red_kpis.empty:
+                for _, r in red_kpis.iterrows():
+                    rk_name = str(r.get("kpi_name", "")).strip()
+                    if function_key(rk_name) == norm_name:
+                        t_val = r.get("Target") if "Target" in r else r.get("target")
+                        a_val = r.get("Actual") if "Actual" in r else r.get("actual")
+                        u_val = r.get("units", "") if "units" in r else ""
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+            if not review_kpis.empty:
+                rev_match = review_kpis[
+                    review_kpis["function_key"].eq(selected_function_key)
+                    & review_kpis["month"].eq(selected_month)
+                ]
+                for _, r in rev_match.iterrows():
+                    rk_name = str(r.get("kpi_name", "")).strip()
+                    if function_key(rk_name) == norm_name:
+                        t_val = r.get("target")
+                        a_val = r.get("actual")
+                        u_val = r.get("units", "") if "units" in r else ""
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+
+        # Pass 2: Fuzzy match
+        for cand in candidates:
+            if not current_rows.empty:
+                for _, r in current_rows.iterrows():
+                    rk_name = str(r.get("kpi_name", "")).strip()
+                    if kpi_match_score(rk_name, cand) >= 0.8:
+                        t_val = r.get("Target")
+                        a_val = r.get("Actual")
+                        u_val = r.get("units", "")
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+        return None, None
+
     def add_card(
         title,
         causes,
@@ -2880,6 +2990,7 @@ def create_continuous_red_detail(function_name, selected_month):
         missing_action_text=None,
     ):
         card_id = slug_kpi_id(f"modal-card-{red_kpi_name or title}")
+        t_disp, a_disp = resolve_kpi_target_actual(title, red_kpi_name)
         card = create_kpi_rca_card(
             title,
             causes,
@@ -2888,6 +2999,9 @@ def create_continuous_red_detail(function_name, selected_month):
             card_id=card_id,
             is_red=is_red,
             missing_action_text=missing_action_text,
+            target_val=t_disp,
+            actual_val=a_disp,
+            reporting_month=selected_month.strftime("%B %Y"),
         )
         red_kpi_tables.append(card)
         modal_kpi_options.append({"label": red_kpi_name or title, "value": card_id})
