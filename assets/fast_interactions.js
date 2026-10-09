@@ -101,8 +101,25 @@
         });
     }
 
+        // ----------------------------------------------------
+        // 4. Modal Scroll Lock Sync
+        // ----------------------------------------------------
+        var rcaModal = document.getElementById('continuous-red-modal');
+        var gaugeModal = document.getElementById('function-gauge-modal');
+        var isRcaOpen = rcaModal && !rcaModal.classList.contains('continuous-red-modal-hidden');
+        var isGaugeOpen = gaugeModal && !gaugeModal.classList.contains('function-gauge-modal-hidden');
+
+        if (isRcaOpen || isGaugeOpen) {
+            document.body.classList.add('modal-open');
+            document.documentElement.classList.add('modal-open');
+        } else {
+            document.body.classList.remove('modal-open');
+            document.documentElement.classList.remove('modal-open');
+        }
+    }
+
     // ----------------------------------------------------
-    // 4. Clean Escape Key Handling (Dispatches Dash native close)
+    // 5. Clean Escape Key Handling (Dispatches Dash native close)
     // ----------------------------------------------------
     if (!window.__modalEscapeBound) {
         window.__modalEscapeBound = true;
@@ -124,7 +141,7 @@
     }
 
     // ----------------------------------------------------
-    // 5. Tab Switching & Browser Focus Recovery
+    // 6. Tab Switching & Browser Focus Recovery
     // ----------------------------------------------------
     function handleVisibilityRecovery() {
         document.querySelectorAll('.card-clicking, .rca-card-opening').forEach(function (el) {
@@ -144,7 +161,7 @@
     });
 
     // ----------------------------------------------------
-    // 6. DOM Initialization & Dynamic Component Observation
+    // 7. DOM Initialization & Dynamic Component Observation
     // ----------------------------------------------------
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initInteractions);
