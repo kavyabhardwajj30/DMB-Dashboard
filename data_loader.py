@@ -611,7 +611,7 @@ def load_red_kpis_rca(file_path=None):
 
     try:
         file_bytes = read_file_safe_bytes(file_path)
-        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=False, rich_text=True)
         records = []
 
         status_map = {
@@ -622,24 +622,39 @@ def load_red_kpis_rca(file_path=None):
             5: "Resolution confirmed",
         }
 
+        def get_cell_clean(cell):
+            if cell is None or cell.value is None:
+                return ""
+            val = cell.value
+            if hasattr(val, "__iter__") and not isinstance(val, (str, bytes)):
+                valid_parts = []
+                for run in val:
+                    f = getattr(run, "font", None)
+                    if f and f.strike:
+                        continue
+                    t = run.text if hasattr(run, "text") else str(run)
+                    valid_parts.append(t)
+                return clean_text("".join(valid_parts))
+            else:
+                if cell.font and cell.font.strike:
+                    return ""
+                return clean_text(val)
+
         for sheet_name in wb.sheetnames:
             if sheet_name in ["MPR Review", "MasterSheet", "Sheet1 (2)"]:
                 continue
             ws = wb[sheet_name]
-            rows = list(ws.iter_rows(values_only=True))
-            if not rows:
-                continue
 
             function_name = sheet_name.replace("1.", "").replace("2.", "").replace("3.", "").replace("4.", "").replace("5.", "").replace("6.", "").replace("7.", "").replace("8.", "").replace("9.", "").replace("10.", "").replace("11.", "").replace("12.", "").strip()
 
             in_rca = False
             in_act = False
 
-            for r_idx, row in enumerate(rows):
-                if not row:
-                    continue
-                c0 = clean_text(row[0]) if len(row) > 0 else ""
-                c1 = clean_text(row[1]) if len(row) > 1 else ""
+            for r_idx in range(1, ws.max_row + 1):
+                c0_cell = ws.cell(row=r_idx, column=1)
+                c1_cell = ws.cell(row=r_idx, column=2)
+                c0 = get_cell_clean(c0_cell)
+                c1 = get_cell_clean(c1_cell)
 
                 if "root cause analysis" in c0.lower() or "root cause analysis" in c1.lower():
                     in_rca = True
@@ -657,11 +672,11 @@ def load_red_kpis_rca(file_path=None):
                         and c0.lower() not in ["red kpi", "action tracker", "action not assigned"]
                         and "if the kpi is reported" not in c0.lower()
                     ):
-                        rc_desc = clean_text(row[1]) if len(row) > 1 else ""
-                        corr_act = clean_text(row[2]) if len(row) > 2 else ""
-                        owner = clean_text(row[3]) if len(row) > 3 else ""
-                        due_val = row[4] if len(row) > 4 else None
-                        status_val = row[5] if len(row) > 5 else None
+                        rc_desc = get_cell_clean(ws.cell(row=r_idx, column=2))
+                        corr_act = get_cell_clean(ws.cell(row=r_idx, column=3))
+                        owner = get_cell_clean(ws.cell(row=r_idx, column=4))
+                        due_val = ws.cell(row=r_idx, column=5)
+                        status_val = ws.cell(row=r_idx, column=6).value
 
                         if rc_desc or corr_act:
                             status_text = ""
@@ -670,11 +685,9 @@ def load_red_kpis_rca(file_path=None):
                             elif status_val is not None:
                                 status_text = clean_text(status_val)
 
-                            due_text = ""
-                            if isinstance(due_val, (pd.Timestamp, datetime.datetime, datetime.date)):
-                                due_text = pd.Timestamp(due_val).strftime("%d %b %Y")
-                            elif due_val is not None:
-                                due_text = clean_text(due_val)
+                            due_text = get_cell_clean(due_val)
+                            if isinstance(due_val.value, (pd.Timestamp, datetime.datetime, datetime.date)):
+                                due_text = pd.Timestamp(due_val.value).strftime("%d %b %Y")
 
                             records.append({
                                 "function": function_name,

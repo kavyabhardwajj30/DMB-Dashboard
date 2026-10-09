@@ -81,28 +81,7 @@
         });
 
         // ----------------------------------------------------
-        // 3. Smooth Scroll on Clickable Summary Cards
-        // ----------------------------------------------------
-        var kpiSummaryCards = document.querySelectorAll('.kpi-summary-card-clickable, [data-scroll-target]');
-        kpiSummaryCards.forEach(function (card) {
-            if (!card.hasAttribute('data-scroll-bound')) {
-                card.setAttribute('data-scroll-bound', 'true');
-                card.addEventListener('click', function (e) {
-                    if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) {
-                        return;
-                    }
-                    var targetId = card.getAttribute('data-scroll-target') || 'rca-section';
-                    var targetElem = document.getElementById(targetId);
-                    if (targetElem) {
-                        targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                });
-            }
-        });
-    }
-
-        // ----------------------------------------------------
-        // 4. Modal Scroll Lock Sync
+        // 3. Modal Scroll Lock Sync
         // ----------------------------------------------------
         var rcaModal = document.getElementById('continuous-red-modal');
         var gaugeModal = document.getElementById('function-gauge-modal');
@@ -117,6 +96,23 @@
             document.documentElement.classList.remove('modal-open');
         }
     }
+
+    // ----------------------------------------------------
+    // 4. Global Event Delegation: Smooth Scroll on Clickable Summary Cards
+    // ----------------------------------------------------
+    document.addEventListener('click', function (e) {
+        var card = e.target && e.target.closest ? e.target.closest('.kpi-summary-card-clickable, [data-scroll-target]') : null;
+        if (card) {
+            if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) {
+                return;
+            }
+            var targetId = card.getAttribute('data-scroll-target') || 'rca-section';
+            var targetElem = document.getElementById(targetId);
+            if (targetElem) {
+                targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    });
 
     // ----------------------------------------------------
     // 5. Clean Escape Key Handling (Dispatches Dash native close)

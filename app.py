@@ -856,15 +856,52 @@ def load_function_rca_details():
         return failed_result(f"{detail_file.name} could not be read: {error}")
 
     try:
-        wb_openpyxl = load_workbook(BytesIO(workbook_bytes), data_only=False)
+        wb_openpyxl = load_workbook(BytesIO(workbook_bytes), data_only=False, rich_text=True)
     except Exception:
         wb_openpyxl = None
+
+    def get_clean_cell_text_without_strike(s_name, r_idx, c_idx, fallback=""):
+        if wb_openpyxl and s_name in wb_openpyxl.sheetnames:
+            try:
+                ws_ox = wb_openpyxl[s_name]
+                c_ox = ws_ox.cell(row=r_idx + 1, column=c_idx + 1)
+                val = c_ox.value
+                if val is None:
+                    return ""
+                if hasattr(val, "__iter__") and not isinstance(val, (str, bytes)):
+                    valid_parts = []
+                    for run in val:
+                        f = getattr(run, "font", None)
+                        if f and f.strike:
+                            continue
+                        t = run.text if hasattr(run, "text") else str(run)
+                        valid_parts.append(t)
+                    return clean_cell_text("".join(valid_parts))
+                else:
+                    if c_ox.font and c_ox.font.strike:
+                        return ""
+                    return clean_cell_text(val)
+            except Exception:
+                pass
+        return clean_cell_text(fallback)
 
     def is_cell_strike(s_name, r_idx, c_idx):
         if wb_openpyxl and s_name in wb_openpyxl.sheetnames:
             try:
                 ws_ox = wb_openpyxl[s_name]
                 c_ox = ws_ox.cell(row=r_idx + 1, column=c_idx + 1)
+                val = c_ox.value
+                if hasattr(val, "__iter__") and not isinstance(val, (str, bytes)):
+                    has_non_strike = False
+                    for run in val:
+                        t = (run.text if hasattr(run, "text") else str(run)).strip()
+                        if not t:
+                            continue
+                        f = getattr(run, "font", None)
+                        if not (f and f.strike):
+                            has_non_strike = True
+                            break
+                    return not has_non_strike
                 return bool(c_ox.font and c_ox.font.strike)
             except Exception:
                 pass
@@ -954,8 +991,8 @@ def load_function_rca_details():
                 if is_cell_strike(sheet_name, data_row_index, column_index):
                     continue  # Ignore cut / struck-through causes in Excel
 
-                cause_text = clean_cell_text(
-                    raw_sheet.iat[data_row_index, column_index]
+                cause_text = get_clean_cell_text_without_strike(
+                    sheet_name, data_row_index, column_index, raw_sheet.iat[data_row_index, column_index]
                 )
                 if not cause_text:
                     continue
@@ -999,13 +1036,23 @@ def load_function_rca_details():
             if source_kpi_name.lower() == "action not assigned":
                 break
 
-            root_cause = clean_cell_text(raw_sheet.iat[row_index, 1])
-            corrective_action = clean_cell_text(raw_sheet.iat[row_index, 2])
+            root_cause = get_clean_cell_text_without_strike(
+                sheet_name, row_index, 1, raw_sheet.iat[row_index, 1]
+            )
+            corrective_action = get_clean_cell_text_without_strike(
+                sheet_name, row_index, 2, raw_sheet.iat[row_index, 2]
+            )
 
             if not root_cause and not corrective_action:
                 continue
 
             status = format_action_status(raw_sheet.iat[row_index, 5])
+            owner_text = get_clean_cell_text_without_strike(
+                sheet_name, row_index, 3, raw_sheet.iat[row_index, 3]
+            )
+            due_date_raw = get_clean_cell_text_without_strike(
+                sheet_name, row_index, 4, raw_sheet.iat[row_index, 4]
+            )
 
             action_records.append(
                 {
@@ -1019,13 +1066,8 @@ def load_function_rca_details():
                     "corrective_action": (
                         corrective_action or "Not entered"
                     ),
-                    "owner": (
-                        clean_cell_text(raw_sheet.iat[row_index, 3])
-                        or "Not assigned"
-                    ),
-                    "due_date": format_due_date(
-                        raw_sheet.iat[row_index, 4]
-                    ),
+                    "owner": owner_text or "Not assigned",
+                    "due_date": format_due_date(due_date_raw or raw_sheet.iat[row_index, 4]),
                     "status": status,
                     "status_class": action_status_class(status),
                 }
@@ -4489,9 +4531,9 @@ def serve_layout():
                 className="top-navigation",
             ),
             dcc.Store(id="one-pager-download-state"),
-            dcc.Store(id="active-rca-modal-state", data={"is_open": False, "function": None, "month": None}),
-            dcc.Store(id="active-gauge-modal-state", data={"is_open": False, "function": None, "selected_kpi": None, "month": None}),
-            dcc.Interval(id="live-sync-interval", interval=3000, n_intervals=0),
+            dcc.Store(id="active-rca-modal-state", storage_type="session", data={"is_open": False, "function": None, "month": None}),
+            dcc.Store(id="active-gauge-modal-state", storage_type="session", data={"is_open": False, "function": None, "selected_kpi": None, "month": None}),
+            dcc.Interval(id="live-sync-interval", interval=10000, n_intervals=0),
             dcc.Store(id="live-sync-state-store"),
             html.Section(
                 [
