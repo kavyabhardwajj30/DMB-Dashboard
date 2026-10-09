@@ -42,6 +42,11 @@ body {
     font-size: 15px;
 }
 
+html.modal-open,
+body.modal-open {
+    overflow: hidden !important;
+}
+
 button,
 input,
 select,

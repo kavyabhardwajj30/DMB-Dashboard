@@ -5071,228 +5071,184 @@ app.clientside_callback(
 
 
 # =========================================================
-# CONTINUOUS-RED DETAIL MODAL CALLBACK (STATE-PRESERVING)
+# CONTINUOUS-RED DETAIL MODAL (0ms INSTANT CLIENT-SIDE CONTROLLER)
 # =========================================================
 
-@app.callback(
+app.clientside_callback(
+    """
+    function(cardClicks, closeClicks, backdropClicks, currentModalState, dmbMonth) {
+        var triggered = window.dash_clientside.callback_context.triggered;
+        if (!triggered || triggered.length === 0) {
+            return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+        }
+
+        var trig = triggered[0];
+        var propId = trig.prop_id || "";
+        var val = trig.value;
+
+        // 1. Close button or Backdrop clicked -> INSTANT 0ms Close
+        if (propId.indexOf("close-continuous-red-modal") !== -1 || propId.indexOf("continuous-red-modal-backdrop") !== -1) {
+            if (val && val > 0) {
+                document.body.classList.remove("modal-open");
+                document.documentElement.classList.remove("modal-open");
+                return [
+                    "continuous-red-modal continuous-red-modal-hidden",
+                    {"is_open": false, "function": null, "month": dmbMonth}
+                ];
+            }
+            return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+        }
+
+        // 2. RCA Card Clicked -> INSTANT 0ms Open
+        if (propId.indexOf("continuous-red-card") !== -1 && val && val > 0) {
+            try {
+                var jsonStr = propId.replace(/\\.n_clicks$/, "");
+                var parsed = JSON.parse(jsonStr);
+                var fnName = parsed.function;
+                if (fnName) {
+                    document.body.classList.add("modal-open");
+                    document.documentElement.classList.add("modal-open");
+                    return [
+                        "continuous-red-modal",
+                        {"is_open": true, "function": fnName, "month": dmbMonth}
+                    ];
+                }
+            } catch(e) {
+                console.error("Error parsing RCA card click:", e);
+            }
+        }
+
+        return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+    }
+    """,
     Output("continuous-red-modal", "className"),
-    Output("continuous-red-modal-title", "children"),
-    Output("continuous-red-modal-month", "children"),
-    Output("continuous-red-modal-body", "children"),
     Output("active-rca-modal-state", "data"),
-    Input(
-        {"type": "continuous-red-card", "function": ALL},
-        "n_clicks",
-    ),
+    Input({"type": "continuous-red-card", "function": ALL}, "n_clicks"),
     Input("close-continuous-red-modal", "n_clicks"),
     Input("continuous-red-modal-backdrop", "n_clicks"),
-    Input("dmb-month-filter", "value"),
-    Input("live-sync-state-store", "data"),
     State("active-rca-modal-state", "data"),
     State("dmb-month-filter", "value"),
     prevent_initial_call=True,
 )
-def manage_continuous_red_modal(
-    card_clicks,
-    close_clicks,
-    backdrop_clicks,
-    month_filter_val,
-    sync_data,
-    current_modal_state,
-    month_state,
-):
-    ctx_inst = dash.callback_context
-    current_modal_state = current_modal_state or {"is_open": False, "function": None, "month": None}
-    selected_month = month_filter_val or month_state or current_modal_state.get("month") or default_month.strftime("%Y-%m-%d")
 
-    if not ctx_inst or not ctx_inst.triggered:
-        raise PreventUpdate
-
-    trig_id = getattr(dash.ctx, "triggered_id", None)
-
-    # 1. Close Button or Backdrop Clicked
-    if trig_id in ("close-continuous-red-modal", "continuous-red-modal-backdrop"):
-        close_has_click = any(
-            item.get("value") for item in ctx_inst.triggered
-            if item.get("prop_id", "").startswith(str(trig_id))
-        )
-        if close_has_click:
-            return (
-                "continuous-red-modal continuous-red-modal-hidden",
-                no_update,
-                no_update,
-                no_update,
-                {"is_open": False, "function": None, "month": selected_month},
-            )
-        raise PreventUpdate
-
-    # 2. Genuine User Click on an RCA Card
-    card_clicked_fn = None
-    if isinstance(trig_id, dict) and trig_id.get("type") == "continuous-red-card":
-        for item in ctx_inst.triggered:
-            val = item.get("value")
-            prop_id = item.get("prop_id", "")
-            if "continuous-red-card" in prop_id and val is not None and val > 0:
-                card_clicked_fn = trig_id.get("function")
-                break
-    elif trig_id is None:
-        for item in ctx_inst.triggered:
-            prop_id = item.get("prop_id", "")
-            val = item.get("value")
-            if "continuous-red-card" in prop_id and val is not None and val > 0:
-                try:
-                    prop_clean = prop_id.split(".")[0]
-                    parsed = json.loads(prop_clean)
-                    if parsed.get("type") == "continuous-red-card":
-                        card_clicked_fn = parsed.get("function")
-                        break
-                except Exception:
-                    pass
-
-    if card_clicked_fn:
-        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(card_clicked_fn, selected_month)
-        return (
-            c_class,
-            c_title,
-            c_month,
-            c_body,
-            {"is_open": True, "function": card_clicked_fn, "month": selected_month},
-        )
-
-    # 3. If modal is currently OPEN (e.g. background 20s interval / card re-mount / month change):
-    # Strictly refresh content for the CURRENT open function (never switch to Card 1 / Quality!)
-    if current_modal_state.get("is_open") and current_modal_state.get("function"):
-        current_fn = current_modal_state.get("function")
-        c_class, c_title, c_month, c_body = get_continuous_red_modal_content(current_fn, selected_month)
-        return (
-            c_class,
-            c_title,
-            c_month,
-            c_body,
-            {"is_open": True, "function": current_fn, "month": selected_month},
-        )
-
-    # 4. Modal is closed and background interval triggered -> Do nothing
-    raise PreventUpdate
-
-
-# =========================================================
-# FUNCTION GAUGE KPI DEFINITIONS & TREND MODAL CALLBACK
-# =========================================================
 
 @app.callback(
-    Output("function-gauge-modal", "className"),
-    Output("function-gauge-modal-title", "children"),
-    Output("function-gauge-modal-subtitle", "children"),
-    Output("function-gauge-modal-body", "children"),
-    Output("active-gauge-modal-state", "data"),
-    Input(
-        {"type": "function-gauge-card", "function": ALL},
-        "n_clicks",
-    ),
-    Input("close-function-gauge-modal", "n_clicks"),
-    Input("function-gauge-modal-backdrop", "n_clicks"),
+    Output("continuous-red-modal-title", "children"),
+    Output("continuous-red-modal-month", "children"),
+    Output("continuous-red-modal-body", "children"),
+    Input("active-rca-modal-state", "data"),
     Input("dmb-month-filter", "value"),
     Input("live-sync-state-store", "data"),
+    prevent_initial_call=True,
+)
+def populate_continuous_red_modal(active_state, month_filter_val, sync_data):
+    if not active_state or not active_state.get("is_open") or not active_state.get("function"):
+        raise PreventUpdate
+
+    function_name = active_state.get("function")
+    selected_month = (
+        month_filter_val
+        or active_state.get("month")
+        or default_month.strftime("%Y-%m-%d")
+    )
+
+    _, c_title, c_month, c_body = get_continuous_red_modal_content(
+        function_name, selected_month
+    )
+    return c_title, c_month, c_body
+
+
+# =========================================================
+# FUNCTION GAUGE KPI DEFINITIONS & TREND MODAL (0ms INSTANT CLIENT-SIDE CONTROLLER)
+# =========================================================
+
+app.clientside_callback(
+    """
+    function(gaugeClicks, closeClicks, backdropClicks, currentModalState, dmbMonth) {
+        var triggered = window.dash_clientside.callback_context.triggered;
+        if (!triggered || triggered.length === 0) {
+            return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+        }
+
+        var trig = triggered[0];
+        var propId = trig.prop_id || "";
+        var val = trig.value;
+
+        // 1. Close button or Backdrop clicked -> INSTANT 0ms Close
+        if (propId.indexOf("close-function-gauge-modal") !== -1 || propId.indexOf("function-gauge-modal-backdrop") !== -1) {
+            if (val && val > 0) {
+                document.body.classList.remove("modal-open");
+                document.documentElement.classList.remove("modal-open");
+                return [
+                    "function-gauge-modal function-gauge-modal-hidden",
+                    {"is_open": false, "function": null, "month": dmbMonth}
+                ];
+            }
+            return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+        }
+
+        // 2. Gauge Card Clicked -> INSTANT 0ms Open
+        if (propId.indexOf("function-gauge-card") !== -1 && val && val > 0) {
+            try {
+                var jsonStr = propId.replace(/\\.n_clicks$/, "");
+                var parsed = JSON.parse(jsonStr);
+                var fnName = parsed.function;
+                if (fnName) {
+                    document.body.classList.add("modal-open");
+                    document.documentElement.classList.add("modal-open");
+                    return [
+                        "function-gauge-modal",
+                        {"is_open": true, "function": fnName, "month": dmbMonth}
+                    ];
+                }
+            } catch(e) {
+                console.error("Error parsing gauge card click:", e);
+            }
+        }
+
+        return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+    }
+    """,
+    Output("function-gauge-modal", "className"),
+    Output("active-gauge-modal-state", "data"),
+    Input({"type": "function-gauge-card", "function": ALL}, "n_clicks"),
+    Input("close-function-gauge-modal", "n_clicks"),
+    Input("function-gauge-modal-backdrop", "n_clicks"),
     State("active-gauge-modal-state", "data"),
     State("dmb-month-filter", "value"),
     prevent_initial_call=True,
 )
-def manage_function_gauge_modal(
-    gauge_card_clicks,
-    close_clicks,
-    backdrop_clicks,
-    month_filter_val,
-    sync_data,
-    current_modal_state,
-    month_state,
-):
-    ctx_inst = dash.callback_context
-    current_modal_state = current_modal_state or {
-        "is_open": False,
-        "function": None,
-        "month": None,
-    }
+
+
+@app.callback(
+    Output("function-gauge-modal-title", "children"),
+    Output("function-gauge-modal-subtitle", "children"),
+    Output("function-gauge-modal-body", "children"),
+    Input("active-gauge-modal-state", "data"),
+    Input("dmb-month-filter", "value"),
+    Input("live-sync-state-store", "data"),
+    prevent_initial_call=True,
+)
+def populate_function_gauge_modal(active_state, month_filter_val, sync_data):
+    if not active_state or not active_state.get("is_open") or not active_state.get("function"):
+        raise PreventUpdate
+
+    func_name = active_state.get("function")
     selected_month = (
         month_filter_val
-        or month_state
-        or current_modal_state.get("month")
+        or active_state.get("month")
         or default_month.strftime("%Y-%m-%d")
     )
 
-    if not ctx_inst or not ctx_inst.triggered:
-        raise PreventUpdate
-
-    trig_id = getattr(dash.ctx, "triggered_id", None)
-
-    # 1. Close Button or Backdrop Clicked
-    if trig_id in ("close-function-gauge-modal", "function-gauge-modal-backdrop"):
-        close_has_click = any(
-            item.get("value")
-            for item in ctx_inst.triggered
-            if item.get("prop_id", "").startswith(str(trig_id))
-        )
-        if close_has_click:
-            return (
-                "function-gauge-modal function-gauge-modal-hidden",
-                no_update,
-                no_update,
-                no_update,
-                {
-                    "is_open": False,
-                    "function": None,
-                    "month": selected_month,
-                },
-            )
-        raise PreventUpdate
-
-    # 2. Gauge Card Clicked from Dashboard (Must have positive clicks)
-    clicked_gauge_fn = None
-    if isinstance(trig_id, dict) and trig_id.get("type") == "function-gauge-card":
-        for item in ctx_inst.triggered:
-            val = item.get("value")
-            prop_id = item.get("prop_id", "")
-            if "function-gauge-card" in prop_id and val is not None and val > 0:
-                clicked_gauge_fn = trig_id.get("function")
-                break
-
-    if clicked_gauge_fn:
-        detail_content = get_function_kpis_trend_modal_content(
-            clicked_gauge_fn, selected_month
-        )
-        sel_dt = pd.Timestamp(selected_month)
-        return (
-            "function-gauge-modal",
-            f"{clicked_gauge_fn} — Function KPI Performance Review",
-            f"All Key Performance Indicators · {sel_dt.strftime('%B %Y')}",
-            detail_content,
-            {
-                "is_open": True,
-                "function": clicked_gauge_fn,
-                "month": selected_month,
-            },
-        )
-
-    # 3. Live Sync or Month Filter Change (Update content if modal currently open)
-    if current_modal_state.get("is_open") and current_modal_state.get("function"):
-        func_name = current_modal_state["function"]
-        detail_content = get_function_kpis_trend_modal_content(
-            func_name, selected_month
-        )
-        sel_dt = pd.Timestamp(selected_month)
-        return (
-            "function-gauge-modal",
-            f"{func_name} — Function KPI Performance Review",
-            f"All Key Performance Indicators · {sel_dt.strftime('%B %Y')}",
-            detail_content,
-            {
-                "is_open": True,
-                "function": func_name,
-                "month": selected_month,
-            },
-        )
-
-    raise PreventUpdate
+    detail_content = get_function_kpis_trend_modal_content(
+        func_name, selected_month
+    )
+    sel_dt = pd.Timestamp(selected_month)
+    return (
+        f"{func_name} — Function KPI Performance Review",
+        f"All Key Performance Indicators · {sel_dt.strftime('%B %Y')}",
+        detail_content,
+    )
 
 
 # =========================================================
