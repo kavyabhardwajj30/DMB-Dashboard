@@ -4410,11 +4410,24 @@ def warmup_cache():
         active_mpr = get_active_mpr_data()
         active_dmb = get_active_dmb_data()
         active_strat = get_active_rca_actions()
-        mpr_months, _ = get_dynamic_reporting_months(active_mpr, active_strat)
-        dmb_months, _ = get_dynamic_reporting_months(active_dmb, active_strat)
+        mpr_months, default_mpr_m = get_dynamic_reporting_months(active_mpr, active_strat)
+        dmb_months, default_dmb_m = get_dynamic_reporting_months(active_dmb, active_strat)
+        
+        # 1. Warm up default reporting months first immediately (< 50ms)
+        for def_m in set([default_dmb_m, default_mpr_m]):
+            m_str = def_m.strftime("%Y-%m-%d")
+            get_mpr_dashboard_content(m_str)
+            get_dmb_function_cards_content(m_str)
+            get_rca_table_content(m_str)
+            for fn in ["Quality", "Regulatory", "ISC & Procurement", "R&D", "Customer Service", "Marketing"]:
+                get_continuous_red_modal_content(fn, m_str)
+                get_function_kpis_trend_modal_content(fn, m_str)
+                
+        # 2. Warm up remaining months in background gently with small yield
         all_months = sorted(set(mpr_months + dmb_months))
         for m in all_months:
             m_str = m.strftime("%Y-%m-%d")
+            time.sleep(0.08)
             get_mpr_dashboard_content(m_str)
             get_dmb_function_cards_content(m_str)
             get_rca_table_content(m_str)
@@ -4877,15 +4890,11 @@ app.layout = serve_layout
     prevent_initial_call=True,
 )
 def handle_live_sync_trigger(n_intervals, current_sync_state=None):
-    # Background interval: check if files changed on disk or if background thread reloaded
-    disk_changed = _data_store.reload()
-    if disk_changed:
-        clear_dmb_cache()
-
+    # Lightweight check: background thread updates _last_loaded
     last_loaded = getattr(_data_store, "_last_loaded", 0.0)
     prev_loaded = (current_sync_state or {}).get("last_loaded", 0.0)
 
-    if disk_changed or (last_loaded > 0 and last_loaded != prev_loaded):
+    if last_loaded > 0 and last_loaded != prev_loaded:
         clear_dmb_cache()
         return {"last_loaded": last_loaded, "ts": time.time(), "auto": True}
 
@@ -5091,6 +5100,8 @@ app.clientside_callback(
             if (val && val > 0) {
                 document.body.classList.remove("modal-open");
                 document.documentElement.classList.remove("modal-open");
+                var bodyEl = document.getElementById("continuous-red-modal-body");
+                if (bodyEl) bodyEl.innerHTML = "";
                 return [
                     "continuous-red-modal continuous-red-modal-hidden",
                     {"is_open": false, "function": null, "month": dmbMonth}
@@ -5099,7 +5110,7 @@ app.clientside_callback(
             return [window.dash_clientside.no_update, window.dash_clientside.no_update];
         }
 
-        // 2. RCA Card Clicked -> INSTANT 0ms Open
+        // 2. RCA Card Clicked -> INSTANT 0ms Open + Instant Header + Skeleton Loader
         if (propId.indexOf("continuous-red-card") !== -1 && val && val > 0) {
             try {
                 var jsonStr = propId.replace(/\\.n_clicks$/, "");
@@ -5108,6 +5119,32 @@ app.clientside_callback(
                 if (fnName) {
                     document.body.classList.add("modal-open");
                     document.documentElement.classList.add("modal-open");
+
+                    var titleEl = document.getElementById("continuous-red-modal-title");
+                    if (titleEl) titleEl.innerText = fnName + " — Root Cause Analysis";
+
+                    var monthEl = document.getElementById("continuous-red-modal-month");
+                    if (monthEl && dmbMonth) {
+                        try {
+                            var d = new Date(dmbMonth + "T00:00:00");
+                            var monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                            monthEl.innerText = monthNames[d.getMonth()] + " " + d.getFullYear();
+                        } catch(e){}
+                    }
+
+                    var bodyEl = document.getElementById("continuous-red-modal-body");
+                    if (bodyEl) {
+                        bodyEl.innerHTML = '<div class="modal-loading-skeleton">' +
+                            '<div class="skeleton-summary-grid">' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '</div>' +
+                            '<div class="skeleton-section-header shimmer"></div>' +
+                            '<div class="skeleton-table shimmer"></div>' +
+                            '</div>';
+                    }
+
                     return [
                         "continuous-red-modal",
                         {"is_open": true, "function": fnName, "month": dmbMonth}
@@ -5179,6 +5216,8 @@ app.clientside_callback(
             if (val && val > 0) {
                 document.body.classList.remove("modal-open");
                 document.documentElement.classList.remove("modal-open");
+                var bodyEl = document.getElementById("function-gauge-modal-body");
+                if (bodyEl) bodyEl.innerHTML = "";
                 return [
                     "function-gauge-modal function-gauge-modal-hidden",
                     {"is_open": false, "function": null, "month": dmbMonth}
@@ -5187,7 +5226,7 @@ app.clientside_callback(
             return [window.dash_clientside.no_update, window.dash_clientside.no_update];
         }
 
-        // 2. Gauge Card Clicked -> INSTANT 0ms Open
+        // 2. Gauge Card Clicked -> INSTANT 0ms Open + Instant Header + Skeleton Loader
         if (propId.indexOf("function-gauge-card") !== -1 && val && val > 0) {
             try {
                 var jsonStr = propId.replace(/\\.n_clicks$/, "");
@@ -5196,6 +5235,33 @@ app.clientside_callback(
                 if (fnName) {
                     document.body.classList.add("modal-open");
                     document.documentElement.classList.add("modal-open");
+
+                    var titleEl = document.getElementById("function-gauge-modal-title");
+                    if (titleEl) titleEl.innerText = fnName + " — Function KPI Performance Review";
+
+                    var subEl = document.getElementById("function-gauge-modal-subtitle");
+                    if (subEl && dmbMonth) {
+                        try {
+                            var d = new Date(dmbMonth + "T00:00:00");
+                            var monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                            subEl.innerText = "All Key Performance Indicators · " + monthNames[d.getMonth()] + " " + d.getFullYear();
+                        } catch(e){}
+                    }
+
+                    var bodyEl = document.getElementById("function-gauge-modal-body");
+                    if (bodyEl) {
+                        bodyEl.innerHTML = '<div class="modal-loading-skeleton">' +
+                            '<div class="skeleton-summary-grid">' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '<div class="skeleton-card shimmer"></div>' +
+                            '</div>' +
+                            '<div class="skeleton-section-header shimmer"></div>' +
+                            '<div class="skeleton-table shimmer"></div>' +
+                            '</div>';
+                    }
+
                     return [
                         "function-gauge-modal",
                         {"is_open": true, "function": fnName, "month": dmbMonth}
