@@ -1,9 +1,8 @@
 /**
  * Fast Client-Side Interactions for DMB Performance Dashboard
  * ==========================================================
- * Provides instant 0ms UI responsiveness:
- * 1. Instant Modal Dismissal (Close button, Backdrop click, Escape key)
- * 2. Instant Visual Feedback on clickables
+ * Provides instant 0ms UI responsiveness, smooth card clicks,
+ * reliable escape key dismissal, and seamless tab switching recovery.
  */
 
 (function () {
@@ -11,7 +10,7 @@
 
     function initInteractions() {
         // ----------------------------------------------------
-        // 1. Navigation Tabs (if present)
+        // 1. Navigation Tabs
         // ----------------------------------------------------
         var tabMpr = document.getElementById('nav-tab-mpr');
         var tabDmb = document.getElementById('nav-tab-dmb');
@@ -53,66 +52,42 @@
         }
 
         // ----------------------------------------------------
-        // 2. Instant Modal Close (Backdrop, Button, Escape)
-        // ----------------------------------------------------
-        function closeModalInstantly() {
-            var modal = document.getElementById('continuous-red-modal');
-            if (modal && !modal.classList.contains('continuous-red-modal-hidden')) {
-                modal.classList.add('continuous-red-modal-hidden');
-            }
-            var gaugeModal = document.getElementById('function-gauge-modal');
-            if (gaugeModal && !gaugeModal.classList.contains('function-gauge-modal-hidden')) {
-                gaugeModal.classList.add('function-gauge-modal-hidden');
-            }
-        }
-
-        var closeBtn = document.getElementById('close-continuous-red-modal');
-        var backdrop = document.getElementById('continuous-red-modal-backdrop');
-        var gaugeCloseBtn = document.getElementById('close-function-gauge-modal');
-        var gaugeBackdrop = document.getElementById('function-gauge-modal-backdrop');
-
-        if (closeBtn && !closeBtn.hasAttribute('data-bound')) {
-            closeBtn.setAttribute('data-bound', 'true');
-            closeBtn.addEventListener('click', closeModalInstantly);
-        }
-        if (backdrop && !backdrop.hasAttribute('data-bound')) {
-            backdrop.setAttribute('data-bound', 'true');
-            backdrop.addEventListener('click', closeModalInstantly);
-        }
-        if (gaugeCloseBtn && !gaugeCloseBtn.hasAttribute('data-bound')) {
-            gaugeCloseBtn.setAttribute('data-bound', 'true');
-            gaugeCloseBtn.addEventListener('click', closeModalInstantly);
-        }
-        if (gaugeBackdrop && !gaugeBackdrop.hasAttribute('data-bound')) {
-            gaugeBackdrop.setAttribute('data-bound', 'true');
-            gaugeBackdrop.addEventListener('click', closeModalInstantly);
-        }
-
-        // ----------------------------------------------------
-        // 3. Instant Visual Feedback on RCA Card Click
+        // 2. Instant Smooth Visual Feedback on Clickable Cards
         // ----------------------------------------------------
         var rcaCards = document.querySelectorAll('.continuous-red-panel-active');
         rcaCards.forEach(function (card) {
             if (!card.hasAttribute('data-click-bound')) {
                 card.setAttribute('data-click-bound', 'true');
                 card.addEventListener('click', function () {
-                    card.classList.add('rca-card-opening');
+                    card.classList.add('card-clicking');
                     setTimeout(function () {
-                        card.classList.remove('rca-card-opening');
-                    }, 800);
+                        card.classList.remove('card-clicking');
+                    }, 400);
+                });
+            }
+        });
+
+        var gaugeCards = document.querySelectorAll('.mini-gauge-container-clickable');
+        gaugeCards.forEach(function (card) {
+            if (!card.hasAttribute('data-click-bound')) {
+                card.setAttribute('data-click-bound', 'true');
+                card.addEventListener('click', function () {
+                    card.classList.add('card-clicking');
+                    setTimeout(function () {
+                        card.classList.remove('card-clicking');
+                    }, 400);
                 });
             }
         });
 
         // ----------------------------------------------------
-        // 4. Smooth Scroll on Clickable Summary Cards (e.g. KPIs not met -> RCA section)
+        // 3. Smooth Scroll on Clickable Summary Cards
         // ----------------------------------------------------
         var kpiSummaryCards = document.querySelectorAll('.kpi-summary-card-clickable, [data-scroll-target]');
         kpiSummaryCards.forEach(function (card) {
             if (!card.hasAttribute('data-scroll-bound')) {
                 card.setAttribute('data-scroll-bound', 'true');
                 card.addEventListener('click', function (e) {
-                    // Avoid triggering if clicking on nested form controls (if any)
                     if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) {
                         return;
                     }
@@ -124,27 +99,61 @@
                 });
             }
         });
-
-        if (!window.__modalEscapeBound) {
-            window.__modalEscapeBound = true;
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' || e.keyCode === 27) {
-                    closeModalInstantly();
-                }
-            });
-        }
     }
 
+    // ----------------------------------------------------
+    // 4. Clean Escape Key Handling (Dispatches Dash native close)
+    // ----------------------------------------------------
+    if (!window.__modalEscapeBound) {
+        window.__modalEscapeBound = true;
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                var rcaModal = document.getElementById('continuous-red-modal');
+                if (rcaModal && !rcaModal.classList.contains('continuous-red-modal-hidden')) {
+                    var rcaClose = document.getElementById('close-continuous-red-modal');
+                    if (rcaClose) rcaClose.click();
+                }
+
+                var gaugeModal = document.getElementById('function-gauge-modal');
+                if (gaugeModal && !gaugeModal.classList.contains('function-gauge-modal-hidden')) {
+                    var gaugeClose = document.getElementById('close-function-gauge-modal');
+                    if (gaugeClose) gaugeClose.click();
+                }
+            }
+        });
+    }
+
+    // ----------------------------------------------------
+    // 5. Tab Switching & Browser Focus Recovery
+    // ----------------------------------------------------
+    function handleVisibilityRecovery() {
+        document.querySelectorAll('.card-clicking, .rca-card-opening').forEach(function (el) {
+            el.classList.remove('card-clicking', 'rca-card-opening');
+        });
+        initInteractions();
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            handleVisibilityRecovery();
+        }
+    });
+
+    window.addEventListener('focus', function () {
+        handleVisibilityRecovery();
+    });
+
+    // ----------------------------------------------------
+    // 6. DOM Initialization & Dynamic Component Observation
+    // ----------------------------------------------------
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initInteractions);
     } else {
         initInteractions();
     }
 
-    // Re-bind after Dash reloads components
     var observer = new MutationObserver(function () {
         initInteractions();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 })();
-

@@ -4420,6 +4420,7 @@ def warmup_cache():
             get_rca_table_content(m_str)
             for fn in ["Quality", "Regulatory", "ISC & Procurement", "R&D", "Customer Service", "Marketing"]:
                 get_continuous_red_modal_content(fn, m_str)
+                get_function_kpis_trend_modal_content(fn, m_str)
     except Exception as e:
         print(f"[Cache Warmup Notice] {e}")
 
@@ -5256,7 +5257,7 @@ def manage_function_gauge_modal(
                 break
 
     if clicked_gauge_fn:
-        detail_content = create_function_kpis_table_detail(
+        detail_content = get_function_kpis_trend_modal_content(
             clicked_gauge_fn, selected_month
         )
         sel_dt = pd.Timestamp(selected_month)
@@ -5275,7 +5276,7 @@ def manage_function_gauge_modal(
     # 3. Live Sync or Month Filter Change (Update content if modal currently open)
     if current_modal_state.get("is_open") and current_modal_state.get("function"):
         func_name = current_modal_state["function"]
-        detail_content = create_function_kpis_table_detail(
+        detail_content = get_function_kpis_trend_modal_content(
             func_name, selected_month
         )
         sel_dt = pd.Timestamp(selected_month)

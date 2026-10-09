@@ -47,17 +47,16 @@ class TestDualModals(unittest.TestCase):
             
             g_res = manage_function_gauge_modal(
                 gauge_card_clicks=[0, 0, 0, 1, 0, 0],
-                kpi_tab_clicks=[],
                 close_clicks=0,
                 backdrop_clicks=0,
                 month_filter_val="2026-07-01",
                 sync_data=None,
-                current_modal_state={"is_open": False, "function": None, "selected_kpi": None, "month": "2026-07-01"},
+                current_modal_state={"is_open": False, "function": None, "month": "2026-07-01"},
                 month_state="2026-07-01",
             )
             g_class, g_title, g_subtitle, g_body, g_state = g_res
             self.assertEqual(g_class, "function-gauge-modal")
-            self.assertIn("R&D", g_subtitle)
+            self.assertIn("R&D", g_title)
             self.assertTrue(g_state["is_open"])
             self.assertEqual(g_state["function"], "R&D")
             print("Successfully tested Gauge KPI & Trend modal opening for R&D.")
