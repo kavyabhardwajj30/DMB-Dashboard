@@ -300,6 +300,7 @@ class SharePointSyncManager:
         self._reload_callbacks: List[Callable[[], Any]] = []
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._local_stat_cache: Dict[str, Tuple[int, int, bool]] = {}
         self._init_existing_hashes()
 
     def _init_existing_hashes(self):
@@ -368,8 +369,20 @@ class SharePointSyncManager:
                         )
                     for cand in candidates:
                         try:
+                            cand_stat = cand.stat()
+                            cand_key = f"{key}:{str(cand.resolve())}"
+                            cached = self._local_stat_cache.get(cand_key)
+                            if cached and cached[0] == cand_stat.st_mtime_ns and cached[1] == cand_stat.st_size:
+                                if cached[2]:
+                                    found_files[key] = cand
+                                    break
+                                else:
+                                    continue
+
                             cand_bytes = read_file_safe_bytes(cand)
-                            if validate_workbook_type(cand_bytes, key):
+                            is_valid = validate_workbook_type(cand_bytes, key)
+                            self._local_stat_cache[cand_key] = (cand_stat.st_mtime_ns, cand_stat.st_size, is_valid)
+                            if is_valid:
                                 found_files[key] = cand
                                 break
                         except Exception:
@@ -531,14 +544,14 @@ class SharePointSyncManager:
             return
 
         def _poller():
-            logger.info("SharePoint Live Sync background poller started (20-second interval).")
+            logger.info("SharePoint Live Sync background poller active.")
             try:
                 self.sync_once()
             except Exception as e:
                 logger.error("Startup sync error: %s", e)
 
             while not self._stop_event.is_set():
-                interval = max(10, int(self.config.get("poll_interval_seconds", 20)))
+                interval = max(2, int(self.config.get("poll_interval_seconds", 3)))
                 time.sleep(interval)
                 try:
                     self.sync_once()

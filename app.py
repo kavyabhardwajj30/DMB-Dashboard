@@ -855,6 +855,21 @@ def load_function_rca_details():
     except (OSError, ValueError) as error:
         return failed_result(f"{detail_file.name} could not be read: {error}")
 
+    try:
+        wb_openpyxl = load_workbook(BytesIO(workbook_bytes), data_only=False)
+    except Exception:
+        wb_openpyxl = None
+
+    def is_cell_strike(s_name, r_idx, c_idx):
+        if wb_openpyxl and s_name in wb_openpyxl.sheetnames:
+            try:
+                ws_ox = wb_openpyxl[s_name]
+                c_ox = ws_ox.cell(row=r_idx + 1, column=c_idx + 1)
+                return bool(c_ox.font and c_ox.font.strike)
+            except Exception:
+                pass
+        return False
+
     for sheet_name, raw_sheet in worksheets.items():
         source_function = sheet_function_name(sheet_name)
         function_name = dashboard_function_name(sheet_name)
@@ -936,6 +951,9 @@ def load_function_rca_details():
 
             cause_rank = 0
             for column_index in range(1, min(6, raw_sheet.shape[1])):
+                if is_cell_strike(sheet_name, data_row_index, column_index):
+                    continue  # Ignore cut / struck-through causes in Excel
+
                 cause_text = clean_cell_text(
                     raw_sheet.iat[data_row_index, column_index]
                 )
@@ -972,6 +990,8 @@ def load_function_rca_details():
             continue
 
         for row_index in range(action_header_index + 1, len(raw_sheet)):
+            if is_cell_strike(sheet_name, row_index, 1) or is_cell_strike(sheet_name, row_index, 2):
+                continue  # Ignore cut / struck-through action rows in Excel
             source_kpi_name = clean_cell_text(raw_sheet.iat[row_index, 0])
 
             if not source_kpi_name:
@@ -1286,7 +1306,16 @@ def insight_list(items, empty_text):
     )
 
 
-def kpi_card(label, value_id, value_color, initial_value="", secondary_id=None, initial_secondary=None):
+def kpi_card(
+    label,
+    value_id,
+    value_color,
+    initial_value="",
+    secondary_id=None,
+    initial_secondary=None,
+    scroll_target=None,
+    title=None,
+):
     value_children = [
         html.Span(
             str(initial_value),
@@ -1305,12 +1334,25 @@ def kpi_card(label, value_id, value_color, initial_value="", secondary_id=None, 
             )
         )
 
+    card_kwargs = {
+        "id": f"card-{value_id}",
+    }
+
+    if scroll_target:
+        card_kwargs["className"] = "kpi-summary-card kpi-summary-card-clickable"
+        card_kwargs["data-scroll-target"] = scroll_target
+        card_kwargs["title"] = title or "Click to jump to Cause and Actions of Red KPIs at MoS Level"
+    else:
+        card_kwargs["className"] = "kpi-summary-card"
+        if title:
+            card_kwargs["title"] = title
+
     return html.Div(
         [
             html.P(label, className="kpi-card-label"),
             html.Div(value_children, className="kpi-value-row"),
         ],
-        className="kpi-summary-card",
+        **card_kwargs,
     )
 
 
@@ -1660,7 +1702,7 @@ def create_function_card(function_name, current_data):
                 ),
                 html.Div(
                     [
-                        html.Div(
+                        html.Button(
                             [
                                 html.Div(
                                     [
@@ -1678,7 +1720,13 @@ def create_function_card(function_name, current_data):
                                     className="mini-gauge-graph",
                                 ),
                             ],
-                            className="mini-gauge-container",
+                            id={
+                                "type": "function-gauge-card",
+                                "function": function_name,
+                            },
+                            n_clicks=0,
+                            className="mini-gauge-container mini-gauge-container-clickable",
+                            title=f"Click to view {function_name} KPI definitions and trends",
                         ),
                         html.Button(
                             [
@@ -1752,7 +1800,7 @@ def create_function_card(function_name, current_data):
             ),
             html.Div(
                 [
-                    html.Div(
+                    html.Button(
                         [
                             html.Div(
                                 [
@@ -1770,7 +1818,13 @@ def create_function_card(function_name, current_data):
                                 className="mini-gauge-graph",
                             ),
                         ],
-                        className="mini-gauge-container",
+                        id={
+                            "type": "function-gauge-card",
+                            "function": function_name,
+                        },
+                        n_clicks=0,
+                        className="mini-gauge-container mini-gauge-container-clickable",
+                        title=f"Click to view {function_name} KPI definitions and 6-month trends",
                     ),
                     html.Button(
                         [
@@ -1882,6 +1936,212 @@ def format_kpi_metric_display(val, unit=""):
         return f"{val_f:.2f}{suffix}" if val_f % 1 != 0 else f"{int(val_f)}{suffix}"
 
 
+def parse_num_and_unit(val):
+    if val is None or pd.isna(val):
+        return None, ""
+    if isinstance(val, (int, float)):
+        return float(val), ""
+    s = str(val).strip()
+    if not s or s in {"—", "-", "–", "nan", "None", "null"}:
+        return None, ""
+    unit = ""
+    if "%" in s:
+        unit = "%"
+    elif "Mn" in s:
+        unit = "Mn"
+    elif "k" in s.lower():
+        unit = "k"
+    elif "day" in s.lower():
+        unit = "days"
+
+    clean_s = re.sub(r"[^0-9.\-]", "", s)
+    try:
+        return float(clean_s), unit
+    except (ValueError, TypeError):
+        return None, ""
+
+
+def get_kpi_metric_nature(kpi_name, default="Higher the better"):
+    if not kpi_name:
+        return default
+    k_norm = function_key(str(kpi_name))
+    k_clean = str(kpi_name).strip().lower()
+
+    # 1. Look in DMB data
+    try:
+        active_dmb = get_active_dmb_data()
+        if not active_dmb.empty and "kpi_name" in active_dmb.columns and "metric_nature" in active_dmb.columns:
+            m = active_dmb[active_dmb["kpi_name"].apply(lambda x: function_key(str(x)) == k_norm or str(x).strip().lower() == k_clean)]
+            if not m.empty:
+                val = m["metric_nature"].dropna()
+                if not val.empty and str(val.iloc[0]).strip():
+                    return str(val.iloc[0]).strip()
+    except Exception:
+        pass
+
+    # 2. Look in MPR data
+    try:
+        active_mpr = get_active_mpr_data()
+        if not active_mpr.empty and "kpi_name" in active_mpr.columns and "metric_nature" in active_mpr.columns:
+            m = active_mpr[active_mpr["kpi_name"].apply(lambda x: function_key(str(x)) == k_norm or str(x).strip().lower() == k_clean)]
+            if not m.empty:
+                val = m["metric_nature"].dropna()
+                if not val.empty and str(val.iloc[0]).strip():
+                    return str(val.iloc[0]).strip()
+    except Exception:
+        pass
+
+    # 3. Look in review_kpis
+    try:
+        rca_data = get_function_rca_data()
+        review_kpis = rca_data.get("review_kpis", pd.DataFrame())
+        if not review_kpis.empty and "kpi_name" in review_kpis.columns and "metric_nature" in review_kpis.columns:
+            m = review_kpis[review_kpis["kpi_name"].apply(lambda x: function_key(str(x)) == k_norm or str(x).strip().lower() == k_clean)]
+            if not m.empty:
+                val = m["metric_nature"].dropna()
+                if not val.empty and str(val.iloc[0]).strip():
+                    return str(val.iloc[0]).strip()
+    except Exception:
+        pass
+
+    return default
+
+
+def compute_kpi_delta_badge(
+    target_val,
+    actual_val,
+    target_raw=None,
+    actual_raw=None,
+    unit_hint="",
+    metric_nature=None,
+    kpi_name=None,
+):
+    t_num, t_u = parse_num_and_unit(target_raw if target_raw is not None else target_val)
+    a_num, a_u = parse_num_and_unit(actual_raw if actual_raw is not None else actual_val)
+    if t_num is None or a_num is None:
+        return None
+    u = unit_hint or a_u or t_u
+    if (u == "%" or unit_hint == "%") and (0 < t_num <= 1.0 and 0 < a_num <= 1.0):
+        t_num *= 100
+        a_num *= 100
+        u = "%"
+
+    diff = a_num - t_num
+    if abs(diff) < 1e-6:
+        val_str = "0.0%" if u == "%" else ("0" if diff == int(diff) else f"{diff:.2f}")
+        return {
+            "val": val_str,
+            "class": "rca-metric-pill-delta rca-delta-neutral",
+            "label": "DELTA: ",
+            "title": "On target (no variance)",
+        }
+
+    # Determine metric nature: Higher the better vs Lower the better
+    nature_str = metric_nature or (get_kpi_metric_nature(kpi_name) if kpi_name else "Higher the better")
+    lower_is_better = "lower" in str(nature_str).lower()
+
+    # Determine favorable vs unfavorable (Green vs Red):
+    # - For Higher the better: Actual > Target (diff > 0) is Favorable (Green), Actual < Target (diff < 0) is Unfavorable (Red)
+    # - For Lower the better: Actual < Target (diff < 0) is Favorable (Green), Actual > Target (diff > 0) is Unfavorable (Red)
+    is_favorable = (diff < 0) if lower_is_better else (diff > 0)
+
+    dir_class = "rca-delta-increase" if is_favorable else "rca-delta-dip"
+    arrow = "▲" if diff > 0 else "▼"
+    sign = "+" if diff > 0 else ""
+
+    if u == "%":
+        fmt_val = f"{arrow} {sign}{diff:.1f}%"
+    elif u == "Mn":
+        fmt_val = f"{arrow} {sign}{diff:.2f} Mn"
+    elif u.lower() in ["no.", "no", "nos"]:
+        fmt_val = f"{arrow} {sign}{int(diff)}" if diff == int(diff) else f"{arrow} {sign}{diff:.1f}"
+    else:
+        suffix = f" {u}".rstrip() if u else ""
+        fmt_val = f"{arrow} {sign}{diff:.2f}{suffix}" if diff % 1 != 0 else f"{arrow} {sign}{int(diff)}{suffix}"
+
+    if lower_is_better:
+        if is_favorable:
+            desc = f"Actual is {abs(diff):.1f}{u} below target (Favorable for Lower-the-better metric)"
+        else:
+            desc = f"Actual is {diff:.1f}{u} above target (Unfavorable for Lower-the-better metric)"
+    else:
+        if is_favorable:
+            desc = f"Actual is {diff:.1f}{u} above target (Met / Exceeded Target)"
+        else:
+            desc = f"Actual is {abs(diff):.1f}{u} below target (Gap / Below Target)"
+
+    return {
+        "val": fmt_val,
+        "class": f"rca-metric-pill-delta {dir_class}",
+        "label": "DELTA: ",
+        "title": desc,
+    }
+
+
+def compute_cause_action_match_score(cause_text, action_root_cause, action_desc=""):
+    c_clean = str(cause_text).strip().lower()
+    rc_clean = str(action_root_cause).strip().lower()
+    desc_clean = str(action_desc).strip().lower()
+
+    if not c_clean or c_clean in {"none", "nan", "—", ""}:
+        return 0.0
+
+    # 1. Exact match
+    if c_clean == rc_clean:
+        return 1.0
+
+    # 2. Substring match
+    if len(c_clean) >= 4 and (c_clean in rc_clean or rc_clean in c_clean):
+        return 0.95
+
+    # 3. Token overlap with root_cause (primary) and action_desc (secondary)
+    stopwords = {'in', 'for', 'the', 'to', 'due', 'of', 'and', 'a', 'on', 'by', 'is', 'at', 'with', 'from', 'as', 'q1', 'q2', 'q3', 'q4', 'oit', 'npi', 'npis', 'kpi', 'gap', 'rate'}
+    words = re.findall(r'[a-zA-Z0-9]+', c_clean)
+    c_toks = set()
+    for w in words:
+        if len(w) >= 3 and w not in stopwords:
+            c_toks.add(w)
+            if w.endswith('s') and len(w) > 3:
+                c_toks.add(w[:-1])
+            if w.endswith('ing') and len(w) > 4:
+                c_toks.add(w[:-3])
+
+    if not c_toks:
+        return 0.0
+
+    rc_words = re.findall(r'[a-zA-Z0-9]+', rc_clean)
+    rc_toks = set()
+    for w in rc_words:
+        if len(w) >= 3 and w not in stopwords:
+            rc_toks.add(w)
+            if w.endswith('s') and len(w) > 3:
+                rc_toks.add(w[:-1])
+            if w.endswith('ing') and len(w) > 4:
+                rc_toks.add(w[:-3])
+
+    desc_words = re.findall(r'[a-zA-Z0-9]+', desc_clean)
+    desc_toks = set()
+    for w in desc_words:
+        if len(w) >= 3 and w not in stopwords:
+            desc_toks.add(w)
+            if w.endswith('s') and len(w) > 3:
+                desc_toks.add(w[:-1])
+            if w.endswith('ing') and len(w) > 4:
+                desc_toks.add(w[:-3])
+
+    common_rc = c_toks & rc_toks
+    common_desc = c_toks & desc_toks
+
+    score = 0.0
+    if common_rc:
+        score += len(common_rc) * 0.4
+    if common_desc:
+        score += len(common_desc) * 0.2
+
+    ratio = score / len(c_toks)
+    return min(1.0, ratio)
+
+
 def create_kpi_rca_card(
     source_kpi_name,
     causes,
@@ -1894,13 +2154,14 @@ def create_kpi_rca_card(
     target_val=None,
     actual_val=None,
     reporting_month=None,
+    metric_nature=None,
 ):
     disp_title = red_kpi_name or source_kpi_name
     if missing_action_text is None:
         missing_action_text = (
             "All corrective actions completed"
             if actions_to_show is not None and not actions_to_show.empty
-            else "No Corrective Actions provided"
+            else "No Corrective Action provided"
         )
 
     # Prepare Causes DataFrame
@@ -1909,7 +2170,7 @@ def create_kpi_rca_card(
             causes.sort_values("cause_rank").copy()
             if "cause_rank" in causes.columns
             else causes.copy()
-        )
+        ).reset_index(drop=True)
     else:
         causes_df = pd.DataFrame()
 
@@ -1921,19 +2182,9 @@ def create_kpi_rca_card(
             ].copy()
             if "status" in actions_to_show.columns
             else actions_to_show.copy()
-        )
+        ).reset_index(drop=True)
     else:
         open_actions = pd.DataFrame()
-
-    num_causes = len(causes_df)
-    num_actions = len(open_actions)
-    total_rows = max(1, num_causes, num_actions)
-
-    cause_spans = calculate_row_spans(total_rows, num_causes)
-    cause_map = {start: (idx, span) for idx, (start, span) in enumerate(cause_spans)}
-
-    action_spans = calculate_row_spans(total_rows, num_actions)
-    action_map = {start: (idx, span) for idx, (start, span) in enumerate(action_spans)}
 
     # Header Row 1: Top Categories (Top Causes = 2 cols, Corrective Action = 4 cols)
     thead_row_1 = html.Tr(
@@ -1963,76 +2214,98 @@ def create_kpi_rca_card(
         ]
     )
 
+    # Match each Action to its most relevant Cause
+    matched_actions_by_cause = {c_i: [] for c_i in range(len(causes_df))}
+    assigned_action_indices = set()
+
+    if not causes_df.empty and not open_actions.empty:
+        for a_idx, a_row in open_actions.iterrows():
+            rc_text = a_row.get("root_cause", "")
+            a_desc = a_row.get("corrective_action", "")
+            best_c_idx = None
+            best_sc = 0.19  # Threshold for meaningful match
+            for c_idx, c_row in causes_df.iterrows():
+                c_text = c_row.get("cause", "")
+                sc = compute_cause_action_match_score(c_text, rc_text, a_desc)
+                if sc > best_sc:
+                    best_sc = sc
+                    best_c_idx = c_idx
+            if best_c_idx is not None:
+                matched_actions_by_cause[best_c_idx].append(a_row)
+                assigned_action_indices.add(a_idx)
+
+    unmatched_actions = [
+        open_actions.iloc[a_i] for a_i in range(len(open_actions))
+        if a_i not in assigned_action_indices
+    ]
+
     tbody_rows = []
 
-    for r_idx in range(total_rows):
-        row_cells = []
-
-        # --- Left Side: Causes (2 cells) ---
-        if num_causes == 0:
-            if r_idx == 0:
-                row_cells.append(
-                    html.Td(
-                        "No RCA provided",
-                        rowSpan=total_rows if total_rows > 1 else None,
-                        className="rca-recovery-cell rca-cause-text rca-missing-text",
-                    )
-                )
-                row_cells.append(
-                    html.Td(
-                        "—",
-                        rowSpan=total_rows if total_rows > 1 else None,
-                        className="rca-recovery-cell text-center rca-col-impact-cell rca-dash-text",
-                    )
-                )
-        elif r_idx in cause_map:
-            c_idx, c_span = cause_map[r_idx]
-            c_row = causes_df.iloc[c_idx]
+    # Case 1: Causes are present
+    if not causes_df.empty:
+        for c_idx, c_row in causes_df.iterrows():
             c_text = clean_cell_text(c_row.get("cause", "")) or "—"
             c_impact = format_impact_badge(c_row.get("impact_percent"))
-            row_cells.append(
-                html.Td(
-                    c_text,
-                    rowSpan=c_span if c_span > 1 else None,
-                    className="rca-recovery-cell rca-cause-text",
-                )
-            )
-            row_cells.append(
-                html.Td(
-                    c_impact,
-                    rowSpan=c_span if c_span > 1 else None,
-                    className="rca-recovery-cell text-center rca-col-impact-cell",
-                )
-            )
+            c_actions = matched_actions_by_cause.get(c_idx, [])
 
-        # --- Right Side: Actions (4 cells) ---
-        if num_actions == 0:
-            if r_idx == 0:
-                row_cells.append(
+            if c_actions:
+                for sub_i, a_row in enumerate(c_actions):
+                    row_cells = []
+                    if sub_i == 0:
+                        row_cells.append(
+                            html.Td(
+                                c_text,
+                                rowSpan=len(c_actions) if len(c_actions) > 1 else None,
+                                className="rca-recovery-cell rca-cause-text",
+                            )
+                        )
+                        row_cells.append(
+                            html.Td(
+                                c_impact,
+                                rowSpan=len(c_actions) if len(c_actions) > 1 else None,
+                                className="rca-recovery-cell text-center rca-col-impact-cell",
+                            )
+                        )
+                    a_desc = clean_cell_text(a_row.get("corrective_action", ""))
+                    while a_desc and a_desc[0] in {";", "-", "–", "—", ":", " ", "\t"}:
+                        a_desc = a_desc[1:].strip()
+
+                    root_cause_str = clean_cell_text(a_row.get("root_cause", ""))
+                    while root_cause_str and root_cause_str[0] in {";", "-", "–", "—", ":", " ", "\t"}:
+                        root_cause_str = root_cause_str[1:].strip()
+
+                    root_cause_display = (
+                        root_cause_str
+                        if root_cause_str and root_cause_str.lower() not in {"not entered", "none", "—", ""}
+                        else "—"
+                    )
+                    a_owner = clean_cell_text(a_row.get("owner", "")) or "—"
+                    a_status_text = clean_cell_text(a_row.get("status", "")) or "Status not entered"
+                    a_status_cls = a_row.get("status_class", "action-status-unknown")
+                    a_status_pill = html.Span(a_status_text, className=f"action-status-pill {a_status_cls}")
+
+                    row_cells.append(html.Td(root_cause_display, className="rca-recovery-cell rca-root-cause-text"))
+                    row_cells.append(html.Td(a_desc or "—", className="rca-recovery-cell rca-action-text"))
+                    row_cells.append(html.Td(a_owner, className="rca-recovery-cell text-center rca-owner-text"))
+                    row_cells.append(html.Td(a_status_pill, className="rca-recovery-cell text-center"))
+                    tbody_rows.append(html.Tr(row_cells, className="rca-recovery-row"))
+            else:
+                # No action matched for this cause -> write No Corrective Action provided in RED
+                row_cells = [
+                    html.Td(c_text, className="rca-recovery-cell rca-cause-text"),
+                    html.Td(c_impact, className="rca-recovery-cell text-center rca-col-impact-cell"),
                     html.Td(
-                        missing_action_text,
-                        rowSpan=total_rows if total_rows > 1 else None,
+                        "No Corrective Action provided",
                         colSpan=2,
                         className="rca-recovery-cell rca-action-text rca-missing-text",
-                    )
-                )
-                row_cells.append(
-                    html.Td(
-                        "—",
-                        rowSpan=total_rows if total_rows > 1 else None,
-                        className="rca-recovery-cell text-center rca-dash-text",
-                    )
-                )
-                row_cells.append(
-                    html.Td(
-                        "—",
-                        rowSpan=total_rows if total_rows > 1 else None,
-                        className="rca-recovery-cell text-center rca-dash-text",
-                    )
-                )
-        elif r_idx in action_map:
-            a_idx, a_span = action_map[r_idx]
-            a_row = open_actions.iloc[a_idx]
+                    ),
+                    html.Td("—", className="rca-recovery-cell text-center rca-dash-text"),
+                    html.Td("—", className="rca-recovery-cell text-center rca-dash-text"),
+                ]
+                tbody_rows.append(html.Tr(row_cells, className="rca-recovery-row"))
+
+        # Extra actions not matched to any cause
+        for a_row in unmatched_actions:
             a_desc = clean_cell_text(a_row.get("corrective_action", ""))
             while a_desc and a_desc[0] in {";", "-", "–", "—", ":", " ", "\t"}:
                 a_desc = a_desc[1:].strip()
@@ -2046,47 +2319,61 @@ def create_kpi_rca_card(
                 if root_cause_str and root_cause_str.lower() not in {"not entered", "none", "—", ""}
                 else "—"
             )
-
             a_owner = clean_cell_text(a_row.get("owner", "")) or "—"
-            a_status_text = (
-                clean_cell_text(a_row.get("status", ""))
-                or "Status not entered"
-            )
+            a_status_text = clean_cell_text(a_row.get("status", "")) or "Status not entered"
             a_status_cls = a_row.get("status_class", "action-status-unknown")
-            a_status_pill = html.Span(
-                a_status_text,
-                className=f"action-status-pill {a_status_cls}",
-            )
+            a_status_pill = html.Span(a_status_text, className=f"action-status-pill {a_status_cls}")
 
-            row_cells.append(
-                html.Td(
-                    root_cause_display,
-                    rowSpan=a_span if a_span > 1 else None,
-                    className="rca-recovery-cell rca-root-cause-text",
-                )
-            )
-            row_cells.append(
-                html.Td(
-                    a_desc or "—",
-                    rowSpan=a_span if a_span > 1 else None,
-                    className="rca-recovery-cell rca-action-text",
-                )
-            )
-            row_cells.append(
-                html.Td(
-                    a_owner,
-                    rowSpan=a_span if a_span > 1 else None,
-                    className="rca-recovery-cell text-center rca-owner-text",
-                )
-            )
-            row_cells.append(
-                html.Td(
-                    a_status_pill,
-                    rowSpan=a_span if a_span > 1 else None,
-                    className="rca-recovery-cell text-center",
-                )
-            )
+            row_cells = [
+                html.Td("", className="rca-recovery-cell rca-cause-text"),
+                html.Td("", className="rca-recovery-cell text-center rca-col-impact-cell"),
+                html.Td(root_cause_display, className="rca-recovery-cell rca-root-cause-text"),
+                html.Td(a_desc or "—", className="rca-recovery-cell rca-action-text"),
+                html.Td(a_owner, className="rca-recovery-cell text-center rca-owner-text"),
+                html.Td(a_status_pill, className="rca-recovery-cell text-center"),
+            ]
+            tbody_rows.append(html.Tr(row_cells, className="rca-recovery-row"))
 
+    # Case 2: Causes are empty, actions exist
+    elif not open_actions.empty:
+        for _, a_row in open_actions.iterrows():
+            a_desc = clean_cell_text(a_row.get("corrective_action", ""))
+            while a_desc and a_desc[0] in {";", "-", "–", "—", ":", " ", "\t"}:
+                a_desc = a_desc[1:].strip()
+
+            root_cause_str = clean_cell_text(a_row.get("root_cause", ""))
+            while root_cause_str and root_cause_str[0] in {";", "-", "–", "—", ":", " ", "\t"}:
+                root_cause_str = root_cause_str[1:].strip()
+
+            root_cause_display = (
+                root_cause_str
+                if root_cause_str and root_cause_str.lower() not in {"not entered", "none", "—", ""}
+                else "—"
+            )
+            a_owner = clean_cell_text(a_row.get("owner", "")) or "—"
+            a_status_text = clean_cell_text(a_row.get("status", "")) or "Status not entered"
+            a_status_cls = a_row.get("status_class", "action-status-unknown")
+            a_status_pill = html.Span(a_status_text, className=f"action-status-pill {a_status_cls}")
+
+            row_cells = [
+                html.Td("", className="rca-recovery-cell rca-cause-text"),
+                html.Td("", className="rca-recovery-cell text-center rca-col-impact-cell"),
+                html.Td(root_cause_display, className="rca-recovery-cell rca-root-cause-text"),
+                html.Td(a_desc or "—", className="rca-recovery-cell rca-action-text"),
+                html.Td(a_owner, className="rca-recovery-cell text-center rca-owner-text"),
+                html.Td(a_status_pill, className="rca-recovery-cell text-center"),
+            ]
+            tbody_rows.append(html.Tr(row_cells, className="rca-recovery-row"))
+
+    # Case 3: Both Causes and Actions are empty
+    else:
+        row_cells = [
+            html.Td("No RCA provided", className="rca-recovery-cell rca-cause-text rca-missing-text"),
+            html.Td("—", className="rca-recovery-cell text-center rca-col-impact-cell rca-dash-text"),
+            html.Td("No Corrective Action provided", colSpan=2, className="rca-recovery-cell rca-action-text rca-missing-text"),
+            html.Td("—", className="rca-recovery-cell text-center rca-dash-text"),
+            html.Td("—", className="rca-recovery-cell text-center rca-dash-text"),
+        ]
         tbody_rows.append(html.Tr(row_cells, className="rca-recovery-row"))
 
     card_kwargs = {"className": "kpi-rca-action-card"}
@@ -2112,6 +2399,24 @@ def create_kpi_rca_card(
                     html.Strong(str(actual_val), className="rca-metric-pill-val rca-metric-val-actual"),
                 ],
                 className="rca-metric-pill rca-metric-pill-actual",
+            )
+        )
+
+    delta_badge = compute_kpi_delta_badge(
+        target_val,
+        actual_val,
+        metric_nature=metric_nature,
+        kpi_name=red_kpi_name or source_kpi_name,
+    )
+    if delta_badge:
+        meta_badges.append(
+            html.Span(
+                [
+                    html.Span(delta_badge["label"], className="rca-metric-pill-lbl"),
+                    html.Strong(delta_badge["val"], className="rca-metric-pill-val rca-metric-val-delta"),
+                ],
+                className=f"rca-metric-pill {delta_badge['class']}",
+                title=delta_badge.get("title", ""),
             )
         )
 
@@ -2947,7 +3252,8 @@ def create_continuous_red_detail(function_name, selected_month):
                         t_val = r.get("Target")
                         a_val = r.get("Actual")
                         u_val = r.get("units", "")
-                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+                        m_val = r.get("metric_nature", "")
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val), m_val
             if not red_kpis.empty:
                 for _, r in red_kpis.iterrows():
                     rk_name = str(r.get("kpi_name", "")).strip()
@@ -2955,7 +3261,8 @@ def create_continuous_red_detail(function_name, selected_month):
                         t_val = r.get("Target") if "Target" in r else r.get("target")
                         a_val = r.get("Actual") if "Actual" in r else r.get("actual")
                         u_val = r.get("units", "") if "units" in r else ""
-                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+                        m_val = r.get("metric_nature", "") if "metric_nature" in r else ""
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val), m_val
             if not review_kpis.empty:
                 rev_match = review_kpis[
                     review_kpis["function_key"].eq(selected_function_key)
@@ -2967,7 +3274,8 @@ def create_continuous_red_detail(function_name, selected_month):
                         t_val = r.get("target")
                         a_val = r.get("actual")
                         u_val = r.get("units", "") if "units" in r else ""
-                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
+                        m_val = r.get("metric_nature", "") if "metric_nature" in r else ""
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val), m_val
 
         # Pass 2: Fuzzy match
         for cand in candidates:
@@ -2978,8 +3286,9 @@ def create_continuous_red_detail(function_name, selected_month):
                         t_val = r.get("Target")
                         a_val = r.get("Actual")
                         u_val = r.get("units", "")
-                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val)
-        return None, None
+                        m_val = r.get("metric_nature", "")
+                        return format_kpi_metric_display(t_val, u_val), format_kpi_metric_display(a_val, u_val), m_val
+        return None, None, None
 
     def add_card(
         title,
@@ -2990,7 +3299,7 @@ def create_continuous_red_detail(function_name, selected_month):
         missing_action_text=None,
     ):
         card_id = slug_kpi_id(f"modal-card-{red_kpi_name or title}")
-        t_disp, a_disp = resolve_kpi_target_actual(title, red_kpi_name)
+        t_disp, a_disp, m_nature = resolve_kpi_target_actual(title, red_kpi_name)
         card = create_kpi_rca_card(
             title,
             causes,
@@ -3002,6 +3311,7 @@ def create_continuous_red_detail(function_name, selected_month):
             target_val=t_disp,
             actual_val=a_disp,
             reporting_month=selected_month.strftime("%B %Y"),
+            metric_nature=m_nature,
         )
         red_kpi_tables.append(card)
         modal_kpi_options.append({"label": red_kpi_name or title, "value": card_id})
@@ -3392,6 +3702,12 @@ _memo_cache = {}
 _cached_signature = None
 
 
+def clear_dmb_cache():
+    global _memo_cache, _cached_signature
+    _memo_cache.clear()
+    _cached_signature = None
+
+
 def get_current_data_sig():
     try:
         return data_folder_signature()
@@ -3488,6 +3804,587 @@ def get_rca_table_content(month_value):
     )
 
 
+def create_kpi_trend_chart(kpi_df, kpi_name, unit_str="%", metric_nature="Higher the better"):
+    if kpi_df.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No trend data available for this KPI.",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=14, color="#64748b", family="Segoe UI"),
+        )
+        fig.update_layout(
+            height=370,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="#ffffff",
+        )
+        return fig
+
+    months_labels = [r["month"].strftime("%b %Y") for _, r in kpi_df.iterrows()]
+    targets = []
+    actuals = []
+    marker_colors = []
+    target_texts = []
+    actual_texts = []
+    is_met_list = []
+
+    valid_targets = kpi_df["Target"].dropna()
+    valid_actuals = kpi_df["Actual"].dropna()
+
+    is_pct = (
+        unit_str == "%"
+        or ("%" in str(kpi_df.get("units", "").iloc[0] if not kpi_df.empty and "units" in kpi_df.columns else ""))
+        or (not valid_targets.empty and 0 < float(valid_targets.max()) <= 1.0)
+        or (not valid_actuals.empty and 0 < float(valid_actuals.max()) <= 1.0)
+    )
+
+    lower_is_better = "lower" in str(metric_nature).lower()
+
+    for _, r in kpi_df.iterrows():
+        t_raw = r["Target"]
+        a_raw = r["Actual"]
+        st = r.get("status", "")
+
+        t_val = float(t_raw) if pd.notna(t_raw) else None
+        a_val = float(a_raw) if pd.notna(a_raw) else None
+
+        if is_pct and t_val is not None and t_val <= 1.0:
+            t_disp_num = round(t_val * 100, 1)
+        else:
+            t_disp_num = round(t_val, 2) if t_val is not None else None
+
+        if is_pct and a_val is not None and a_val <= 1.0:
+            a_disp_num = round(a_val * 100, 1)
+        else:
+            a_disp_num = round(a_val, 2) if a_val is not None else None
+
+        targets.append(t_disp_num)
+        actuals.append(a_disp_num)
+
+        if t_disp_num is not None:
+            t_str = f"{t_disp_num:.1f}%" if is_pct else (f"{int(t_disp_num)}" if t_disp_num == int(t_disp_num) else f"{t_disp_num:.1f}")
+            target_texts.append(t_str)
+        else:
+            target_texts.append(None)
+
+        if a_disp_num is not None:
+            a_str = f"{a_disp_num:.1f}%" if is_pct else (f"{int(a_disp_num)}" if a_disp_num == int(a_disp_num) else f"{a_disp_num:.1f}")
+            actual_texts.append(a_str)
+
+            # Polarity coloring
+            if st == "Met":
+                is_met_point = True
+            elif st == "Not Met":
+                is_met_point = False
+            elif t_disp_num is not None:
+                is_met_point = (a_disp_num <= t_disp_num) if lower_is_better else (a_disp_num >= t_disp_num)
+            else:
+                is_met_point = True
+
+            is_met_list.append(is_met_point)
+            marker_colors.append("#168b69" if is_met_point else "#dc3d56")
+        else:
+            actual_texts.append(None)
+            is_met_list.append(None)
+            marker_colors.append("#94a3b8")
+
+    fig = go.Figure()
+
+    # Target Line - Exact Philips Blue (#0877b9)
+    fig.add_trace(
+        go.Scatter(
+            x=months_labels,
+            y=targets,
+            mode="lines+markers",
+            name="Target",
+            line=dict(color="#0877b9", width=3, dash="solid"),
+            marker=dict(size=9, color="#0877b9", line=dict(color="#ffffff", width=2)),
+            hovertemplate="<b>%{x}</b><br>🎯 Target: <b>%{y}" + ("%" if is_pct else "") + "</b><extra></extra>",
+        )
+    )
+
+    # Add colored segments for Actual Line (Red for dips / Not Met, Green for Met)
+    for i in range(len(months_labels) - 1):
+        a1 = actuals[i]
+        a2 = actuals[i + 1]
+        if a1 is not None and a2 is not None:
+            m1_met = is_met_list[i]
+            m2_met = is_met_list[i + 1]
+            seg_is_red = (m2_met is False) or (m1_met is False and m2_met is not True)
+            seg_color = "#dc3d56" if seg_is_red else "#168b69"
+            fig.add_trace(
+                go.Scatter(
+                    x=[months_labels[i], months_labels[i + 1]],
+                    y=[a1, a2],
+                    mode="lines",
+                    showlegend=False,
+                    line=dict(color=seg_color, width=3.2),
+                    hoverinfo="skip",
+                )
+            )
+
+    # Split actual points by Met / Not Met so both green and red dots display in legend
+    met_x = [months_labels[i] for i, m in enumerate(is_met_list) if m is True and actuals[i] is not None]
+    met_y = [actuals[i] for i, m in enumerate(is_met_list) if m is True and actuals[i] is not None]
+
+    not_met_x = [months_labels[i] for i, m in enumerate(is_met_list) if m is False and actuals[i] is not None]
+    not_met_y = [actuals[i] for i, m in enumerate(is_met_list) if m is False and actuals[i] is not None]
+
+    # Actual (Met) - Green dot
+    fig.add_trace(
+        go.Scatter(
+            x=met_x if met_x else [None],
+            y=met_y if met_y else [None],
+            mode="markers",
+            name="Actual (Met)",
+            marker=dict(
+                size=12,
+                color="#168b69",
+                line=dict(color="#ffffff", width=2.5),
+            ),
+            hovertemplate="<b>%{x}</b><br>🟢 Actual (Met): <b>%{y}" + ("%" if is_pct else "") + "</b><extra></extra>",
+        )
+    )
+
+    # Actual (Not Met) - Red dot
+    if not_met_x or not met_x:
+        fig.add_trace(
+            go.Scatter(
+                x=not_met_x if not_met_x else [None],
+                y=not_met_y if not_met_y else [None],
+                mode="markers",
+                name="Actual (Not Met)",
+                marker=dict(
+                    size=12,
+                    color="#dc3d56",
+                    line=dict(color="#ffffff", width=2.5),
+                ),
+                hovertemplate="<b>%{x}</b><br>🔴 Actual (Not Met): <b>%{y}" + ("%" if is_pct else "") + "</b><extra></extra>",
+            )
+        )
+
+    # Calculate smart non-overlapping callouts
+    valid_nums = [v for v in targets + actuals if v is not None]
+    if valid_nums:
+        y_min = min(valid_nums)
+        y_max = max(valid_nums)
+        span = max(y_max - y_min, 8 if is_pct else 2)
+        if is_pct:
+            y_range = [min(-8.0, y_min - span * 0.18), max(112.0, y_max + span * 0.18)]
+        else:
+            y_range = [y_min - span * 0.22, y_max + span * 0.22]
+    else:
+        y_range = [-10, 115]
+
+    # Clean Data Numbers (NO BOX BORDERS, crisp contrast typography)
+    for i, m_label in enumerate(months_labels):
+        t_val = targets[i]
+        a_val = actuals[i]
+        t_txt = target_texts[i]
+        a_txt = actual_texts[i]
+        pt_met = is_met_list[i] if i < len(is_met_list) else None
+
+        if t_val is not None and a_val is not None:
+            # Both Target and Actual exist
+            if abs(t_val - a_val) < (span * 0.08):
+                if a_val <= (y_min + span * 0.1):  # near bottom
+                    a_yshift = 18
+                    t_yshift = 40
+                else:
+                    a_yshift = 18
+                    t_yshift = -20
+            elif a_val >= t_val:
+                a_yshift = 18
+                t_yshift = -18
+            else:
+                t_yshift = 18
+                a_yshift = -18
+                if a_val <= (y_min + span * 0.06):
+                    a_yshift = 18
+                    t_yshift = 40
+
+            # Target Number (Exact Philips Blue #0877b9, clean floating text)
+            fig.add_annotation(
+                x=m_label,
+                y=t_val,
+                text=f"<b>{t_txt}</b>",
+                showarrow=False,
+                yshift=t_yshift,
+                bgcolor="rgba(255, 255, 255, 0.85)",
+                bordercolor="rgba(0,0,0,0)",
+                borderwidth=0,
+                font=dict(size=13, color="#0877b9", family="Segoe UI", weight=750),
+            )
+
+            # Actual Number (Green for Met, Red for Not Met, clean floating text)
+            act_color = "#168b69" if pt_met else "#dc3d56"
+            fig.add_annotation(
+                x=m_label,
+                y=a_val,
+                text=f"<b>{a_txt}</b>",
+                showarrow=False,
+                yshift=a_yshift,
+                bgcolor="rgba(255, 255, 255, 0.85)",
+                bordercolor="rgba(0,0,0,0)",
+                borderwidth=0,
+                font=dict(size=13, color=act_color, family="Segoe UI", weight=800),
+            )
+
+        elif t_val is not None:
+            fig.add_annotation(
+                x=m_label,
+                y=t_val,
+                text=f"<b>{t_txt}</b>",
+                showarrow=False,
+                yshift=18,
+                bgcolor="rgba(255, 255, 255, 0.85)",
+                bordercolor="rgba(0,0,0,0)",
+                borderwidth=0,
+                font=dict(size=13, color="#0877b9", family="Segoe UI", weight=750),
+            )
+
+        elif a_val is not None:
+            act_color = "#168b69" if pt_met else "#dc3d56"
+            a_yshift = 18 if a_val <= (y_min + span * 0.1) else -18
+            fig.add_annotation(
+                x=m_label,
+                y=a_val,
+                text=f"<b>{a_txt}</b>",
+                showarrow=False,
+                yshift=a_yshift,
+                bgcolor="rgba(255, 255, 255, 0.85)",
+                bordercolor="rgba(0,0,0,0)",
+                borderwidth=0,
+                font=dict(size=13, color=act_color, family="Segoe UI", weight=800),
+            )
+
+    fig.update_layout(
+        autosize=True,
+        height=390,
+        margin=dict(l=50, r=50, t=55, b=45),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#ffffff",
+        legend=dict(
+            orientation="h",
+            x=0.5,
+            xanchor="center",
+            y=1.14,
+            font=dict(size=13.5, family="Segoe UI", color="#082d4c", weight=750),
+            bgcolor="rgba(245, 249, 253, 0.96)",
+            bordercolor="#c9ddec",
+            borderwidth=1,
+            itemclick=False,
+            itemdoubleclick=False,
+        ),
+        xaxis=dict(
+            showgrid=False,
+            tickfont=dict(size=12, color="#0f172a", family="Segoe UI", weight=600),
+            linecolor="#cbd5e1",
+            linewidth=1.2,
+        ),
+        yaxis=dict(
+            range=y_range,
+            ticksuffix="%" if is_pct else "",
+            gridcolor="#e9f1f6",
+            gridwidth=1,
+            zeroline=True,
+            zerolinecolor="#cbd5e1",
+            zerolinewidth=1,
+            tickfont=dict(size=11.5, color="#475569", family="Segoe UI", weight=600),
+            linecolor="#cbd5e1",
+            linewidth=1.2,
+        ),
+        font=dict(family="Segoe UI"),
+    )
+    return fig
+
+
+def create_function_kpis_table_detail(function_name, selected_month):
+    selected_month = pd.Timestamp(selected_month)
+    active_dmb = get_active_dmb_data()
+
+    if function_name == "ISC & Procurement":
+        fn_rows = active_dmb[
+            active_dmb["function"].isin(["ISC & Procurement", "ISC", "Procurement"])
+        ].copy()
+    else:
+        fn_rows = active_dmb[
+            active_dmb["function"].eq(function_name)
+        ].copy()
+
+    if fn_rows.empty:
+        return html.Div(
+            [
+                html.H3("No KPI Data Found"),
+                html.P(f"No KPI records found for {function_name}."),
+            ],
+            className="modal-empty-state",
+        )
+
+    kpi_names = fn_rows["kpi_name"].dropna().unique().tolist()
+    if not kpi_names:
+        return html.Div(
+            [
+                html.H3("No KPIs Available"),
+                html.P(f"No KPIs available for {function_name}."),
+            ],
+            className="modal-empty-state",
+        )
+
+    # Active completed months up to current year/data (e.g. Jan to Aug or full months)
+    all_months = sorted(fn_rows["month"].dropna().unique())
+    if not all_months:
+        all_months = [selected_month]
+
+    # Calculate summary metrics for selected month
+    sel_rows = fn_rows[fn_rows["month"].eq(selected_month)].copy()
+    total_kpis = len(kpi_names)
+    met_count = int(sel_rows["is_met"].sum()) if not sel_rows.empty and "is_met" in sel_rows.columns else 0
+    not_met_count = int(sel_rows["status"].eq("Not Met").sum()) if not sel_rows.empty and "status" in sel_rows.columns else 0
+    filled_count = met_count + not_met_count
+    met_rate = round(met_count / filled_count * 100, 1) if filled_count > 0 else 0.0
+
+    # 1. Executive Metric Stat Cards (Large, prominent, elevated)
+    summary_bar = html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span("TOTAL KPIS", className="fn-stat-label"),
+                            html.Span(f"{function_name} Scope", className="fn-stat-sub"),
+                        ],
+                        className="fn-stat-info",
+                    ),
+                    html.Strong(str(total_kpis), className="fn-stat-value fn-stat-val-total"),
+                ],
+                className="fn-stat-card fn-stat-total",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span(f"MET IN {selected_month.strftime('%b').upper()}", className="fn-stat-label"),
+                            html.Span("On-Target Benchmark", className="fn-stat-sub"),
+                        ],
+                        className="fn-stat-info",
+                    ),
+                    html.Strong(str(met_count), className="fn-stat-value fn-stat-val-met"),
+                ],
+                className="fn-stat-card fn-stat-met",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span(f"NOT MET IN {selected_month.strftime('%b').upper()}", className="fn-stat-label"),
+                            html.Span("Performance Gap / Red", className="fn-stat-sub"),
+                        ],
+                        className="fn-stat-info",
+                    ),
+                    html.Strong(str(not_met_count), className="fn-stat-value fn-stat-val-not-met"),
+                ],
+                className="fn-stat-card fn-stat-not-met",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span("MET RATE", className="fn-stat-label"),
+                            html.Span(f"{selected_month.strftime('%B %Y')} Compliance", className="fn-stat-sub"),
+                        ],
+                        className="fn-stat-info",
+                    ),
+                    html.Strong(f"{met_rate}%", className="fn-stat-value fn-stat-val-rate"),
+                ],
+                className="fn-stat-card fn-stat-rate",
+            ),
+        ],
+        className="fn-stat-cards-grid",
+    )
+
+    # Format helpers
+    def format_val_str(val, unit, is_pct_hint=False):
+        if val is None or pd.isna(val) or str(val).strip() in {"", "nan", "None", "—"}:
+            return "—"
+        try:
+            num = float(val)
+            if unit == "%" or is_pct_hint or (abs(num) <= 1.5 and abs(num) > 0 and unit != "Mn"):
+                return f"{num * 100:.1f}%" if abs(num) <= 1.5 else f"{num:.1f}%"
+            elif unit == "Mn":
+                return f"€{num:,.2f}M" if num >= 0 else f"-€{abs(num):,.2f}M"
+            elif float(num).is_integer():
+                return f"{int(num)}"
+            else:
+                return f"{num:,.2f}".rstrip("0").rstrip(".")
+        except (ValueError, TypeError):
+            return str(val)
+
+    # 2. Build Individual KPI Cards with 2-Row Monthly Trend Tables
+    kpi_cards = []
+    for idx, k_name in enumerate(kpi_names, 1):
+        k_hist = fn_rows[fn_rows["kpi_name"] == k_name].sort_values("month")
+        def_val = k_hist["definition"].dropna().iloc[0] if not k_hist["definition"].dropna().empty else ""
+        unit_val = k_hist["units"].dropna().iloc[0] if not k_hist["units"].dropna().empty else ""
+        op_val = k_hist["operator"].dropna().iloc[0] if not k_hist["operator"].dropna().empty else ""
+        aop_val = k_hist["target_aop_2026"].dropna().iloc[0] if not k_hist["target_aop_2026"].dropna().empty else ""
+        nature_val = k_hist["metric_nature"].dropna().iloc[0] if not k_hist["metric_nature"].dropna().empty else ""
+
+        is_pct = unit_val == "%" or "percent" in k_name.lower() or "%" in k_name or (isinstance(aop_val, (int, float)) and abs(aop_val) <= 1.0 and unit_val != "Mn")
+
+        aop_fmt = format_val_str(aop_val, unit_val, is_pct)
+        target_aop_display = f"{op_val} {aop_fmt}".strip() if op_val else aop_fmt
+        nature_display = f"{unit_val} · {nature_val}".strip(" ·") if unit_val or nature_val else ""
+
+        curr_record = k_hist[k_hist["month"] == selected_month]
+        st_curr = curr_record["status"].iloc[0] if not curr_record.empty else "No Data"
+
+        if st_curr == "Met":
+            status_pill = html.Span("🟢 Met", className="fn-badge-met")
+        elif st_curr == "Not Met":
+            status_pill = html.Span("🔴 Not Met", className="fn-badge-not-met")
+        else:
+            status_pill = html.Span("— No Data", className="fn-badge-nodata")
+
+        # Header for this KPI card
+        meta_items = []
+        if target_aop_display:
+            meta_items.append(
+                html.Div(
+                    [
+                        html.Span("Target AOP:", className="fn-kpi-meta-lbl"),
+                        html.Strong(target_aop_display, className="fn-kpi-meta-val"),
+                        html.Span(f"({nature_display})" if nature_display else "", className="fn-kpi-meta-nature"),
+                    ],
+                    className="fn-kpi-meta-pill",
+                )
+            )
+
+        meta_items.append(
+            html.Div(
+                [
+                    html.Span(f"{selected_month.strftime('%b %Y')}:", className="fn-kpi-curr-lbl"),
+                    status_pill,
+                ],
+                className="fn-kpi-curr-status-wrap",
+            )
+        )
+
+        card_header = html.Div(
+            [
+                html.Div(
+                    [
+                        html.Span(f"#{idx}", className="fn-kpi-idx-badge"),
+                        html.Div(
+                            [
+                                html.H3(k_name, className="fn-kpi-title"),
+                                html.P(def_val or f"Performance metric for {function_name}", className="fn-kpi-def"),
+                            ],
+                            className="fn-kpi-title-wrap",
+                        ),
+                    ],
+                    className="fn-kpi-header-left",
+                ),
+                html.Div(
+                    meta_items,
+                    className="fn-kpi-header-right",
+                ),
+            ],
+            className="fn-kpi-header-bar",
+        )
+
+        # Build 2-Row Monthly Trend Table
+        trend_th_cells = [
+            html.Th("Monthly Trend", className="fn-trend-th fn-trend-th-metric"),
+        ]
+        for m in all_months:
+            is_cur = (m == selected_month)
+            th_cls = "fn-trend-th fn-trend-th-month" + (" fn-trend-th-selected" if is_cur else "")
+            trend_th_cells.append(
+                html.Th(m.strftime("%b"), className=th_cls)
+            )
+
+        # Row 1: Target (Excel Blue Format)
+        target_td_cells = [
+            html.Td(
+                html.Span("Target", className="fn-row-type-badge fn-badge-target"),
+                className="fn-trend-td-type fn-td-target-label",
+            ),
+        ]
+        for m in all_months:
+            m_rec = k_hist[k_hist["month"] == m]
+            m_tgt = m_rec["Target"].iloc[0] if not m_rec.empty else None
+            t_str = format_val_str(m_tgt, unit_val, is_pct)
+            is_cur = (m == selected_month)
+            td_cls = "fn-trend-td fn-trend-tgt-cell" + (" fn-cell-selected-month" if is_cur else "")
+            target_td_cells.append(
+                html.Td(t_str, className=td_cls, title=f"{m.strftime('%b %Y')} Target: {t_str}")
+            )
+
+        # Row 2: Actual (Red/Green Format)
+        actual_td_cells = [
+            html.Td(
+                html.Span("Actual", className="fn-row-type-badge fn-badge-actual"),
+                className="fn-trend-td-type fn-td-actual-label",
+            ),
+        ]
+        for m in all_months:
+            m_rec = k_hist[k_hist["month"] == m]
+            m_act = m_rec["Actual"].iloc[0] if not m_rec.empty else None
+            m_st = m_rec["status"].iloc[0] if not m_rec.empty else "No Data"
+            a_str = format_val_str(m_act, unit_val, is_pct)
+            is_cur = (m == selected_month)
+
+            if m_st == "Met":
+                st_cls = "fn-act-met"
+            elif m_st == "Not Met":
+                st_cls = "fn-act-not-met"
+            else:
+                st_cls = "fn-act-nodata"
+
+            td_cls = f"fn-trend-td fn-trend-act-cell {st_cls}" + (" fn-cell-selected-month" if is_cur else "")
+            actual_td_cells.append(
+                html.Td(a_str, className=td_cls, title=f"{m.strftime('%b %Y')} Actual: {a_str} ({m_st})")
+            )
+
+        table_el = html.Div(
+            html.Table(
+                [
+                    html.Thead(html.Tr(trend_th_cells)),
+                    html.Tbody(
+                        [
+                            html.Tr(target_td_cells, className="fn-trend-row-target"),
+                            html.Tr(actual_td_cells, className="fn-trend-row-actual"),
+                        ]
+                    ),
+                ],
+                className="fn-kpi-trend-table",
+            ),
+            className="fn-trend-table-container",
+        )
+
+        kpi_cards.append(
+            html.Div(
+                [
+                    card_header,
+                    table_el,
+                ],
+                className="fn-kpi-card",
+            )
+        )
+
+    return html.Div(
+        [
+            summary_bar,
+            html.Div(kpi_cards, className="fn-kpi-cards-stack"),
+        ],
+        className="fn-modal-content-container",
+    )
+
+
 @memoize_by_data_signature
 def get_continuous_red_modal_content(function_name, month_value):
     selected_month = pd.Timestamp(month_value)
@@ -3500,6 +4397,12 @@ def get_continuous_red_modal_content(function_name, month_value):
             selected_month,
         ),
     )
+
+
+@memoize_by_data_signature
+def get_function_kpis_trend_modal_content(function_name, month_value, active_kpi=None):
+    selected_month = pd.Timestamp(month_value)
+    return create_function_kpis_table_detail(function_name, selected_month)
 
 
 def warmup_cache():
@@ -3573,7 +4476,8 @@ def serve_layout():
             ),
             dcc.Store(id="one-pager-download-state"),
             dcc.Store(id="active-rca-modal-state", data={"is_open": False, "function": None, "month": None}),
-            dcc.Interval(id="live-sync-interval", interval=20000, n_intervals=0),
+            dcc.Store(id="active-gauge-modal-state", data={"is_open": False, "function": None, "selected_kpi": None, "month": None}),
+            dcc.Interval(id="live-sync-interval", interval=3000, n_intervals=0),
             dcc.Store(id="live-sync-state-store"),
             html.Section(
                 [
@@ -3655,6 +4559,8 @@ def serve_layout():
                                         "mpr-not-met-kpis",
                                         "#dc3d56",
                                         initial_value=mpr_init[2],
+                                        scroll_target="rca-section",
+                                        title="Click to jump to Cause and Actions of Red KPIs at MoS Level",
                                     ),
                                 ],
                                 className="kpi-summary-group kpi-summary-group-3",
@@ -3889,6 +4795,68 @@ def serve_layout():
                     "continuous-red-modal continuous-red-modal-hidden"
                 ),
             ),
+            html.Div(
+                [
+                    html.Button(
+                        id="function-gauge-modal-backdrop",
+                        className="function-gauge-modal-backdrop",
+                        n_clicks=0,
+                        title="Close details",
+                    ),
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                html.Span("📈", className="trend-header-icon"),
+                                                className="trend-header-icon-wrap",
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.H2(
+                                                        id="function-gauge-modal-title"
+                                                    ),
+                                                    html.P(
+                                                        id="function-gauge-modal-subtitle",
+                                                        className="trend-header-subtitle",
+                                                    ),
+                                                ],
+                                                className="trend-header-title-box",
+                                            ),
+                                        ],
+                                        className="trend-header-left",
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Button(
+                                                [
+                                                    html.Span("←", className="modal-back-arrow"),
+                                                    html.Span("Back", className="modal-back-text"),
+                                                ],
+                                                id="close-function-gauge-modal",
+                                                n_clicks=0,
+                                                className="function-gauge-modal-close",
+                                                title="Back to Dashboard",
+                                            ),
+                                        ],
+                                        className="trend-header-right",
+                                    ),
+                                ],
+                                className="function-gauge-modal-header",
+                            ),
+                            html.Div(
+                                id="function-gauge-modal-body",
+                                className="function-gauge-modal-body",
+                            ),
+                        ],
+                        className="function-gauge-modal-dialog",
+                    ),
+                ],
+                id="function-gauge-modal",
+                className="function-gauge-modal function-gauge-modal-hidden",
+            ),
         ],
         className="page-shell",
     )
@@ -3898,16 +4866,29 @@ app.layout = serve_layout
 
 
 # =========================================================
-# BACKGROUND LIVE AUTO-SYNC (20-SECOND CYCLE)
+# BACKGROUND LIVE AUTO-SYNC (CONTINUOUS REAL-TIME CYCLE)
 # =========================================================
 
 @app.callback(
     Output("live-sync-state-store", "data"),
     Input("live-sync-interval", "n_intervals"),
+    State("live-sync-state-store", "data"),
     prevent_initial_call=True,
 )
-def handle_live_sync_trigger(n_intervals):
-    return {"last_loaded": getattr(_data_store, "_last_loaded", time.time()), "ts": time.time()}
+def handle_live_sync_trigger(n_intervals, current_sync_state=None):
+    # Background interval: check if files changed on disk or if background thread reloaded
+    disk_changed = _data_store.reload()
+    if disk_changed:
+        clear_dmb_cache()
+
+    last_loaded = getattr(_data_store, "_last_loaded", 0.0)
+    prev_loaded = (current_sync_state or {}).get("last_loaded", 0.0)
+
+    if disk_changed or (last_loaded > 0 and last_loaded != prev_loaded):
+        clear_dmb_cache()
+        return {"last_loaded": last_loaded, "ts": time.time(), "auto": True}
+
+    return no_update
 
 
 @app.callback(
@@ -4144,7 +5125,7 @@ def manage_continuous_red_modal(
             )
         raise PreventUpdate
 
-    # 2. Genuine User Click on an RCA Card (MUST have value > 0, not component mount value=0/None)
+    # 2. Genuine User Click on an RCA Card
     card_clicked_fn = None
     if isinstance(trig_id, dict) and trig_id.get("type") == "continuous-red-card":
         for item in ctx_inst.triggered:
@@ -4153,9 +5134,7 @@ def manage_continuous_red_modal(
             if "continuous-red-card" in prop_id and val is not None and val > 0:
                 card_clicked_fn = trig_id.get("function")
                 break
-
-    # Fallback for older Dash versions or array inspection
-    if card_clicked_fn is None and trig_id is None:
+    elif trig_id is None:
         for item in ctx_inst.triggered:
             prop_id = item.get("prop_id", "")
             val = item.get("value")
@@ -4193,6 +5172,125 @@ def manage_continuous_red_modal(
         )
 
     # 4. Modal is closed and background interval triggered -> Do nothing
+    raise PreventUpdate
+
+
+# =========================================================
+# FUNCTION GAUGE KPI DEFINITIONS & TREND MODAL CALLBACK
+# =========================================================
+
+@app.callback(
+    Output("function-gauge-modal", "className"),
+    Output("function-gauge-modal-title", "children"),
+    Output("function-gauge-modal-subtitle", "children"),
+    Output("function-gauge-modal-body", "children"),
+    Output("active-gauge-modal-state", "data"),
+    Input(
+        {"type": "function-gauge-card", "function": ALL},
+        "n_clicks",
+    ),
+    Input("close-function-gauge-modal", "n_clicks"),
+    Input("function-gauge-modal-backdrop", "n_clicks"),
+    Input("dmb-month-filter", "value"),
+    Input("live-sync-state-store", "data"),
+    State("active-gauge-modal-state", "data"),
+    State("dmb-month-filter", "value"),
+    prevent_initial_call=True,
+)
+def manage_function_gauge_modal(
+    gauge_card_clicks,
+    close_clicks,
+    backdrop_clicks,
+    month_filter_val,
+    sync_data,
+    current_modal_state,
+    month_state,
+):
+    ctx_inst = dash.callback_context
+    current_modal_state = current_modal_state or {
+        "is_open": False,
+        "function": None,
+        "month": None,
+    }
+    selected_month = (
+        month_filter_val
+        or month_state
+        or current_modal_state.get("month")
+        or default_month.strftime("%Y-%m-%d")
+    )
+
+    if not ctx_inst or not ctx_inst.triggered:
+        raise PreventUpdate
+
+    trig_id = getattr(dash.ctx, "triggered_id", None)
+
+    # 1. Close Button or Backdrop Clicked
+    if trig_id in ("close-function-gauge-modal", "function-gauge-modal-backdrop"):
+        close_has_click = any(
+            item.get("value")
+            for item in ctx_inst.triggered
+            if item.get("prop_id", "").startswith(str(trig_id))
+        )
+        if close_has_click:
+            return (
+                "function-gauge-modal function-gauge-modal-hidden",
+                no_update,
+                no_update,
+                no_update,
+                {
+                    "is_open": False,
+                    "function": None,
+                    "month": selected_month,
+                },
+            )
+        raise PreventUpdate
+
+    # 2. Gauge Card Clicked from Dashboard (Must have positive clicks)
+    clicked_gauge_fn = None
+    if isinstance(trig_id, dict) and trig_id.get("type") == "function-gauge-card":
+        for item in ctx_inst.triggered:
+            val = item.get("value")
+            prop_id = item.get("prop_id", "")
+            if "function-gauge-card" in prop_id and val is not None and val > 0:
+                clicked_gauge_fn = trig_id.get("function")
+                break
+
+    if clicked_gauge_fn:
+        detail_content = create_function_kpis_table_detail(
+            clicked_gauge_fn, selected_month
+        )
+        sel_dt = pd.Timestamp(selected_month)
+        return (
+            "function-gauge-modal",
+            f"{clicked_gauge_fn} — Function KPI Performance Review",
+            f"All Key Performance Indicators · {sel_dt.strftime('%B %Y')}",
+            detail_content,
+            {
+                "is_open": True,
+                "function": clicked_gauge_fn,
+                "month": selected_month,
+            },
+        )
+
+    # 3. Live Sync or Month Filter Change (Update content if modal currently open)
+    if current_modal_state.get("is_open") and current_modal_state.get("function"):
+        func_name = current_modal_state["function"]
+        detail_content = create_function_kpis_table_detail(
+            func_name, selected_month
+        )
+        sel_dt = pd.Timestamp(selected_month)
+        return (
+            "function-gauge-modal",
+            f"{func_name} — Function KPI Performance Review",
+            f"All Key Performance Indicators · {sel_dt.strftime('%B %Y')}",
+            detail_content,
+            {
+                "is_open": True,
+                "function": func_name,
+                "month": selected_month,
+            },
+        )
+
     raise PreventUpdate
 
 

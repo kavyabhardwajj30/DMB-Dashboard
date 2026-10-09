@@ -325,7 +325,7 @@ def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int,
 
     try:
         port = cfg["port"]
-        with imaplib.IMAP4_SSL(host, port, timeout=5) as imap:
+        with imaplib.IMAP4_SSL(host, port, timeout=3) as imap:
             clean_password = password.replace(" ", "") if "gmail.com" in host.lower() else password
             imap.login(user, clean_password)
             imap.select(cfg["folder"])
@@ -448,7 +448,7 @@ def sync_once(resolve_target: Callable[[str], Path] | None = None) -> Tuple[int,
                     break
 
     except Exception as exc:
-        logger.warning("Mailbox sync notice: %s", exc)
+        logger.debug("Mailbox sync notice: %s", exc)
         return len(updated_files), updated_files
 
     return len(updated_files), updated_files

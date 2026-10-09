@@ -63,9 +63,9 @@
 }
 
 .rca-card-opening {
-    opacity: 0.85;
-    pointer-events: none;
-    transform: scale(0.97) !important;
+    opacity: 0.9;
+    transform: scale(0.98) !important;
+    transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), opacity 0.12s ease;
 }
 
 .continuous-red-modal {
@@ -583,6 +583,71 @@
     color: #ffffff !important;
 }
 
+/* Delta Pill: Distinct variance pill showing increase or dip wrt target */
+.rca-metric-pill-delta {
+    background: #0f172a !important;
+    border: 1.5px solid #334155 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+.rca-metric-pill-delta .rca-metric-pill-lbl {
+    color: #cbd5e1 !important;
+    font-weight: 750;
+}
+
+.rca-metric-pill-delta .rca-metric-pill-val {
+    color: #f8fafc !important;
+    font-weight: 850;
+}
+
+/* Dip: Highlighted variance below target */
+.rca-metric-pill-delta.rca-delta-dip {
+    background: #450a0a !important;
+    border: 1.5px solid #b91c1c !important;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.28) !important;
+}
+
+.rca-metric-pill-delta.rca-delta-dip .rca-metric-pill-lbl {
+    color: #fecaca !important;
+    opacity: 0.92;
+}
+
+.rca-metric-pill-delta.rca-delta-dip .rca-metric-pill-val {
+    color: #fca5a5 !important;
+    font-weight: 850;
+}
+
+/* Increase: Highlighted variance above target */
+.rca-metric-pill-delta.rca-delta-increase {
+    background: #064e3b !important;
+    border: 1.5px solid #059669 !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.28) !important;
+}
+
+.rca-metric-pill-delta.rca-delta-increase .rca-metric-pill-lbl {
+    color: #a7f3d0 !important;
+    opacity: 0.92;
+}
+
+.rca-metric-pill-delta.rca-delta-increase .rca-metric-pill-val {
+    color: #6ee7b7 !important;
+    font-weight: 850;
+}
+
+/* Neutral: On target */
+.rca-metric-pill-delta.rca-delta-neutral {
+    background: #1e293b !important;
+    border: 1.5px solid #475569 !important;
+}
+
+.rca-metric-pill-delta.rca-delta-neutral .rca-metric-pill-lbl {
+    color: #94a3b8 !important;
+}
+
+.rca-metric-pill-delta.rca-delta-neutral .rca-metric-pill-val {
+    color: #f1f5f9 !important;
+}
+
 
 
 /* Recovery Plan Unified Table */
@@ -683,6 +748,17 @@
     font-size: 13.5px;
     font-weight: 600;
     text-align: left;
+}
+
+.rca-missing-text {
+    color: #dc3d56 !important;
+    font-style: italic;
+    font-weight: 700;
+}
+
+.rca-dash-text {
+    color: #64748b;
+    font-weight: 600;
 }
 
 .rca-impact-pill {

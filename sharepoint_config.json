@@ -1,6 +1,6 @@
 {
   "sync_enabled": true,
-  "poll_interval_seconds": 20,
+  "poll_interval_seconds": 3,
   "sync_mode": "auto",
   "mailbox": {
     "imap_host": "imap.gmail.com",

@@ -60,10 +60,16 @@
             if (modal && !modal.classList.contains('continuous-red-modal-hidden')) {
                 modal.classList.add('continuous-red-modal-hidden');
             }
+            var gaugeModal = document.getElementById('function-gauge-modal');
+            if (gaugeModal && !gaugeModal.classList.contains('function-gauge-modal-hidden')) {
+                gaugeModal.classList.add('function-gauge-modal-hidden');
+            }
         }
 
         var closeBtn = document.getElementById('close-continuous-red-modal');
         var backdrop = document.getElementById('continuous-red-modal-backdrop');
+        var gaugeCloseBtn = document.getElementById('close-function-gauge-modal');
+        var gaugeBackdrop = document.getElementById('function-gauge-modal-backdrop');
 
         if (closeBtn && !closeBtn.hasAttribute('data-bound')) {
             closeBtn.setAttribute('data-bound', 'true');
@@ -72,6 +78,14 @@
         if (backdrop && !backdrop.hasAttribute('data-bound')) {
             backdrop.setAttribute('data-bound', 'true');
             backdrop.addEventListener('click', closeModalInstantly);
+        }
+        if (gaugeCloseBtn && !gaugeCloseBtn.hasAttribute('data-bound')) {
+            gaugeCloseBtn.setAttribute('data-bound', 'true');
+            gaugeCloseBtn.addEventListener('click', closeModalInstantly);
+        }
+        if (gaugeBackdrop && !gaugeBackdrop.hasAttribute('data-bound')) {
+            gaugeBackdrop.setAttribute('data-bound', 'true');
+            gaugeBackdrop.addEventListener('click', closeModalInstantly);
         }
 
         // ----------------------------------------------------
@@ -86,6 +100,27 @@
                     setTimeout(function () {
                         card.classList.remove('rca-card-opening');
                     }, 800);
+                });
+            }
+        });
+
+        // ----------------------------------------------------
+        // 4. Smooth Scroll on Clickable Summary Cards (e.g. KPIs not met -> RCA section)
+        // ----------------------------------------------------
+        var kpiSummaryCards = document.querySelectorAll('.kpi-summary-card-clickable, [data-scroll-target]');
+        kpiSummaryCards.forEach(function (card) {
+            if (!card.hasAttribute('data-scroll-bound')) {
+                card.setAttribute('data-scroll-bound', 'true');
+                card.addEventListener('click', function (e) {
+                    // Avoid triggering if clicking on nested form controls (if any)
+                    if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) {
+                        return;
+                    }
+                    var targetId = card.getAttribute('data-scroll-target') || 'rca-section';
+                    var targetElem = document.getElementById(targetId);
+                    if (targetElem) {
+                        targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
                 });
             }
         });

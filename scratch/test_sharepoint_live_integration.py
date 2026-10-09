@@ -29,19 +29,23 @@ def test_integration():
     
     print("\n--- 3. Testing Dash Callbacks ---")
     # Live sync callback
-    sync_store_data, pill_class, status_txt, time_txt = app.handle_live_sync_trigger(1, 0)
-    print(f"Sync Callback Output: pill={pill_class}, status={status_txt}, time={time_txt}")
+    sync_store_data = app.handle_live_sync_trigger(1)
+    print(f"Sync Callback Output: data={sync_store_data}")
     
     # Month callbacks
     default_m = "2026-08-01"
-    mpr_res = app.update_mpr_dashboard(default_m, sync_store_data)
-    print(f"MPR Callback KPIs total: {mpr_res[0]}, Met: {mpr_res[1]}, Not met: {mpr_res[2]}")
+    mpr_res = app.update_mpr_dashboard(default_m, default_m, sync_store_data)
+    print(f"MPR Callback Title: {mpr_res[0]}, KPIs total: {mpr_res[1]}")
     
-    dmb_res = app.update_dmb_function_cards(default_m, sync_store_data)
+    dmb_res = app.update_dmb_function_cards(default_m, default_m, sync_store_data)
     print(f"DMB Callback Functions count: {len(dmb_res)}")
     
-    rca_res = app.update_rca_table(default_m, sync_store_data)
+    rca_res = app.update_rca_table(default_m, default_m, sync_store_data)
     print(f"RCA Table Month: {rca_res[1]}")
+    
+    # Test Function KPIs 2-row Table Detail
+    fn_detail = app.create_function_kpis_table_detail("Quality", default_m)
+    print(f"Function Detail Rendered: type={type(fn_detail)}")
     
     print("\n>>> ALL TESTS PASSED SUCCESSFULLY! <<<")
 

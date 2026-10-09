@@ -10,6 +10,7 @@
     background: #ffffff;
     box-shadow: 0 8px 24px rgba(23, 63, 91, 0.09);
     padding: 0;
+    scroll-margin-top: 24px;
 }
 
 .rca-header-bar {
@@ -348,6 +349,135 @@
     padding: 3px 10px;
     border-radius: 12px;
     flex-shrink: 0;
+}
+
+.rca-header-right-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.rca-header-metrics-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.rca-metric-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    padding: 4px 12px;
+    border-radius: 7px;
+    font-family: inherit;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+    letter-spacing: 0.02em;
+}
+
+.rca-metric-pill-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 750;
+}
+
+.rca-metric-pill-val {
+    font-weight: 850;
+    font-size: 13px;
+}
+
+.rca-metric-pill-target {
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+}
+
+.rca-metric-pill-target .rca-metric-pill-lbl {
+    color: #475569 !important;
+}
+
+.rca-metric-pill-target .rca-metric-pill-val {
+    color: #002d4b !important;
+}
+
+.rca-metric-pill-actual {
+    background: #dc2626 !important;
+    border: 1.5px solid #ef4444 !important;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35) !important;
+}
+
+.rca-metric-pill-actual .rca-metric-pill-lbl {
+    color: #fee2e2 !important;
+    opacity: 0.95;
+}
+
+.rca-metric-pill-actual .rca-metric-pill-val {
+    color: #ffffff !important;
+}
+
+.rca-metric-pill-delta {
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+}
+
+.rca-metric-pill-delta .rca-metric-pill-lbl {
+    color: #475569 !important;
+    font-weight: 750;
+}
+
+.rca-metric-pill-delta .rca-metric-pill-val {
+    color: #0f172a !important;
+    font-weight: 850;
+}
+
+.rca-metric-pill-delta.rca-delta-dip {
+    background: #ffffff !important;
+    border: 1.5px solid #dc2626 !important;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.18) !important;
+}
+
+.rca-metric-pill-delta.rca-delta-dip .rca-metric-pill-lbl {
+    color: #991b1b !important;
+    opacity: 1;
+}
+
+.rca-metric-pill-delta.rca-delta-dip .rca-metric-pill-val {
+    color: #dc2626 !important;
+    font-weight: 850;
+}
+
+.rca-metric-pill-delta.rca-delta-increase {
+    background: #ffffff !important;
+    border: 1.5px solid #059669 !important;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.18) !important;
+}
+
+.rca-metric-pill-delta.rca-delta-increase .rca-metric-pill-lbl {
+    color: #065f46 !important;
+    opacity: 1;
+}
+
+.rca-metric-pill-delta.rca-delta-increase .rca-metric-pill-val {
+    color: #059669 !important;
+    font-weight: 850;
+}
+
+.rca-metric-pill-delta.rca-delta-neutral {
+    background: #ffffff !important;
+    border: 1.5px solid #94a3b8 !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+
+.rca-metric-pill-delta.rca-delta-neutral .rca-metric-pill-lbl {
+    color: #475569 !important;
+}
+
+.rca-metric-pill-delta.rca-delta-neutral .rca-metric-pill-val {
+    color: #1e293b !important;
 }
 
 /* Recovery Plan Unified Table */
